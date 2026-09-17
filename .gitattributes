@@ -1,0 +1,2 @@
+*.pkg filter=lfs diff=lfs merge=lfs -text
+*.exfat filter=lfs diff=lfs merge=lfs -text
