@@ -171,7 +171,7 @@ async function loadPayloads() {
   grid.innerHTML = '<div class="loading-state"><span class="spinner"></span> Loading available payloads...</div>';
 
   try {
-    const res = await fetch("/api/payloads");
+    const res = await fetch("/api/payloads?t=" + Date.now(), { cache: "no-store" });
     if (!res.ok) throw new Error("Failed to load payloads list");
     const data = await res.json();
     allPayloads = data.payloads || [];

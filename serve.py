@@ -32,14 +32,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.wfile.write(payload)
 
     def do_GET(self):
+        clean_path = self.path.split("?")[0]
+
         # Redirect PS5 User's Guide subpath to the root exploit index.html
-        if self.path.startswith("/document/"):
+        if clean_path.startswith("/document/"):
             self.send_response(302)
             self.send_header("Location", "/index.html")
             self.end_headers()
             return
 
-        if self.path == "/api/info":
+        if clean_path == "/api/info":
             self.send_json(200, {
                 "clientIp": self.client_address[0],
                 "serverIp": local_ip(),
@@ -47,7 +49,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
             return
 
-        if self.path == "/api/payloads":
+        if clean_path == "/api/payloads":
             payloads_dir = ROOT / "payloads"
             files = []
             if payloads_dir.exists():
