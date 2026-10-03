@@ -185,6 +185,65 @@ async function loadPayloads() {
   }
 }
 
+function getClientPayloadMeta(name) {
+  const lower = name.toLowerCase();
+  if (lower.includes("etahen")) {
+    return {
+      category: "Homebrew Enabler",
+      description: "All-in-one PS5 Homebrew Enabler by LightningMods. Activates kstuff, FTP server, payload launcher, cheats, and debug settings."
+    };
+  } else if (lower.includes("kstuff")) {
+    return {
+      category: "Kernel Patcher",
+      description: "Kernel patcher by Sleirsgoevy. Enables execution of decrypted fself binaries and fake packages (fpkg) on the console."
+    };
+  } else if (lower.includes("kexec") || lower.includes("linux")) {
+    return {
+      category: "Linux Bootloader",
+      description: "PS5 Kexec bootloader. Shuts down FreeBSD/hypervisor state and boots Linux (SteamOS / Ubuntu / Fedora) from USB."
+    };
+  } else if (lower.includes("shadowmount")) {
+    return {
+      category: "Filesystem Mounter",
+      description: "Filesystem utility by EchoStretch. Mounts internal system and game directories for modding, dumping, and file management."
+    };
+  } else if (lower.includes("legacyjb")) {
+    return {
+      category: "Legacy Loader",
+      description: "Backwards-compatibility loader for staging and executing older or legacy PS5 payloads into memory."
+    };
+  } else if (lower.includes("web-file-mgr")) {
+    return {
+      category: "File Manager",
+      description: "Web-based file manager by logic-68. Spawns an internal HTTP browser on the console to manage and transfer files."
+    };
+  } else if (lower.includes("autoloader")) {
+    return {
+      category: "Offline Cache",
+      description: "Installs the WebKit exploit offline directly into the PS5's User's Guide or home screen cache for offline jailbreaking."
+    };
+  } else if (lower.includes("pldmgr")) {
+    return {
+      category: "Payload Manager",
+      description: "Background payload manager daemon for staging, organizing, and chaining multiple homebrew payloads."
+    };
+  } else if (lower.includes("elfldr")) {
+    return {
+      category: "ELF Loader",
+      description: "Core payload daemon listening on TCP port 9021. Receives and runs unsigned ELF binaries directly in memory."
+    };
+  } else if (lower.includes("kexp")) {
+    return {
+      category: "Kernel Stager",
+      description: "Kernel shellcode stager. Prepares privileged memory and stages the ELF loader daemon."
+    };
+  }
+  return {
+    category: "Payload",
+    description: "Executable payload binary for execution via port 9021."
+  };
+}
+
 function renderPayloads(payloads) {
   const grid = document.getElementById("payloads-grid");
   if (!grid) return;
@@ -197,14 +256,25 @@ function renderPayloads(payloads) {
   payloads.forEach((item) => {
     const card = document.createElement("div");
     card.className = "payload-card";
-    const isLinux = item.name.toLowerCase().includes("kexec") || item.name.toLowerCase().includes("linux");
+
+    const fallback = getClientPayloadMeta(item.name);
+    const category = item.category || fallback.category;
+    const desc = item.description || fallback.description;
+    const isLinux = category.includes("Linux") || item.name.toLowerCase().includes("kexec") || item.name.toLowerCase().includes("linux");
+
+    // Full tooltip on hover
+    card.setAttribute("title", `${item.name}\n\nCategory: ${category}\nSize: ${item.formattedSize}\n\n${desc}`);
 
     card.innerHTML = `
       <div class="payload-header">
-        <span class="payload-ext ${item.ext === '.elf' ? 'ext-elf' : 'ext-bin'}">${item.ext.replace('.', '').toUpperCase()}</span>
+        <div class="payload-tags">
+          <span class="payload-ext ${item.ext === '.elf' ? 'ext-elf' : 'ext-bin'}">${item.ext.replace('.', '').toUpperCase()}</span>
+          <span class="payload-category">${escapeHtml(category)}</span>
+        </div>
         <span class="payload-size">${escapeHtml(item.formattedSize)}</span>
       </div>
       <div class="payload-name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+      <div class="payload-desc" title="${escapeHtml(desc)}">${escapeHtml(desc)}</div>
       ${isLinux ? '<span class="badge-linux">Linux Loader</span>' : ''}
       <button class="btn-send-payload" data-name="${escapeHtml(item.name)}">
         <span class="send-icon">🚀</span> Send to PS5

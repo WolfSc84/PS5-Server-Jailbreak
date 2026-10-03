@@ -14,6 +14,64 @@ ROOT = Path(__file__).resolve().parent
 CERT_FILE = ROOT / "cert.pem"
 KEY_FILE = ROOT / "key.pem"
 
+def get_payload_meta(name: str):
+    lower = name.lower()
+    if "etahen" in lower:
+        return {
+            "category": "Homebrew Enabler",
+            "description": "All-in-one PS5 Homebrew Enabler by LightningMods. Activates kstuff, FTP server, payload launcher, cheats, and debug settings."
+        }
+    elif "kstuff" in lower:
+        return {
+            "category": "Kernel Patcher",
+            "description": "Kernel patcher by Sleirsgoevy. Enables execution of decrypted fself binaries and fake packages (fpkg) on the console."
+        }
+    elif "kexec" in lower or "linux" in lower:
+        return {
+            "category": "Linux Bootloader",
+            "description": "PS5 Kexec bootloader. Shuts down FreeBSD/hypervisor state and boots Linux (SteamOS / Ubuntu / Fedora) from USB."
+        }
+    elif "shadowmount" in lower:
+        return {
+            "category": "Filesystem Mounter",
+            "description": "Filesystem utility by EchoStretch. Mounts internal system and game directories for modding, dumping, and file management."
+        }
+    elif "legacyjb" in lower:
+        return {
+            "category": "Legacy Loader",
+            "description": "Backwards-compatibility loader for staging and executing older or legacy PS5 payloads into memory."
+        }
+    elif "web-file-mgr" in lower:
+        return {
+            "category": "File Manager",
+            "description": "Web-based file manager by logic-68. Spawns an internal HTTP browser on the console to manage and transfer files."
+        }
+    elif "autoloader" in lower:
+        return {
+            "category": "Offline Cache",
+            "description": "Installs the WebKit exploit offline directly into the PS5's User's Guide or home screen cache for offline jailbreaking."
+        }
+    elif "pldmgr" in lower:
+        return {
+            "category": "Payload Manager",
+            "description": "Background payload manager daemon for staging, organizing, and chaining multiple homebrew payloads."
+        }
+    elif "elfldr" in lower:
+        return {
+            "category": "ELF Loader",
+            "description": "Core payload daemon listening on TCP port 9021. Receives and runs unsigned ELF binaries directly in memory."
+        }
+    elif "kexp" in lower:
+        return {
+            "category": "Kernel Stager",
+            "description": "Kernel shellcode stager. Prepares privileged memory and stages the ELF loader daemon."
+        }
+    else:
+        return {
+            "category": "Payload",
+            "description": f"Executable payload binary for execution via port 9021."
+        }
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT), **kwargs)
@@ -57,11 +115,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     if p.is_file() and p.suffix.lower() in [".elf", ".bin"]:
                         sz = p.stat().st_size
                         sz_fmt = f"{sz / (1024*1024):.2f} MB" if sz >= 1024*1024 else f"{sz / 1024:.1f} KB"
+                        meta = get_payload_meta(p.name)
                         files.append({
                             "name": p.name,
                             "size": sz,
                             "formattedSize": sz_fmt,
-                            "ext": p.suffix.lower()
+                            "ext": p.suffix.lower(),
+                            "category": meta["category"],
+                            "description": meta["description"]
                         })
             self.send_json(200, {"payloads": files})
             return
