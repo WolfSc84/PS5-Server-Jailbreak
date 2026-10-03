@@ -2,17 +2,707 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <title>PS5-Relapse</title>
+  <title>PS5 Relapse Exploit Host</title>
   <style>
-    html, body {
-      background: #060606;
+    :root {
+      --bg-dark: #0a0d14;
+      --card-bg: rgba(20, 26, 40, 0.85);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover: rgba(30, 40, 65, 0.95);
+      --primary: #0070d1;
+      --primary-glow: #00a2ff;
+      --accent: #00e676;
+      --accent-glow: rgba(0, 230, 118, 0.4);
+      --error: #ff334b;
+      --text-main: #f0f4fc;
+      --text-dim: #8fa0c0;
+      --console-bg: #05070b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(circle at top center, #151d30 0%, var(--bg-dark) 70%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* Header Bar */
+    header {
+      background: rgba(10, 13, 20, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      font-size: 26px;
+      background: linear-gradient(135deg, #0070d1, #00e676);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      font-weight: 900;
+    }
+
+    .brand-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--card-border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-dim);
+    }
+
+    .badge-fw {
+      border-color: rgba(0, 162, 255, 0.3);
+      color: #70c4ff;
+      background: rgba(0, 112, 209, 0.15);
+    }
+
+    .status-pill {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      transition: all 0.3s ease;
+    }
+
+    .status-pill.state-idle {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-dim);
+    }
+
+    .status-pill.state-running {
+      background: rgba(0, 162, 255, 0.2);
+      color: #60c5ff;
+      border: 1px solid rgba(0, 162, 255, 0.4);
+      box-shadow: 0 0 12px rgba(0, 162, 255, 0.3);
+    }
+
+    .status-pill.state-success {
+      background: rgba(0, 230, 118, 0.2);
+      color: #00e676;
+      border: 1px solid rgba(0, 230, 118, 0.5);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    .status-pill.state-error {
+      background: rgba(255, 51, 75, 0.2);
+      color: var(--error);
+      border: 1px solid rgba(255, 51, 75, 0.4);
+    }
+
+    /* Navigation Tabs */
+    .nav-container {
+      max-width: 1200px;
+      width: 100%;
+      margin: 20px auto 0 auto;
+      padding: 0 24px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 12px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 10px;
+    }
+
+    .nav-tab {
+      background: transparent;
+      border: none;
+      color: var(--text-dim);
+      font-size: 16px;
+      font-weight: 600;
+      padding: 10px 22px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-tab:hover, .nav-tab:focus {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.05);
+      outline: none;
+    }
+
+    .nav-tab.active {
       color: #fff;
+      background: var(--primary);
+      box-shadow: 0 4px 14px rgba(0, 112, 209, 0.4);
+    }
+
+    .tab-badge {
+      background: rgba(255, 255, 255, 0.2);
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .nav-tab.unlocked {
+      animation: pulse-border 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-border {
+      0% { box-shadow: 0 0 4px rgba(0, 230, 118, 0.3); }
+      100% { box-shadow: 0 0 16px rgba(0, 230, 118, 0.8); }
+    }
+
+    /* Main Content */
+    main {
+      max-width: 1200px;
+      width: 100%;
+      margin: 16px auto 32px auto;
+      padding: 0 24px;
+      flex: 1;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.25s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    /* Hero Action Card */
+    .hero-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .hero-info h2 {
+      font-size: 24px;
+      margin-bottom: 6px;
+    }
+
+    .hero-info p {
+      color: var(--text-dim);
+      font-size: 14px;
+      max-width: 580px;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .btn-run {
+      background: linear-gradient(135deg, #0070d1, #00a2ff);
+      color: #fff;
+      border: none;
+      font-size: 17px;
+      font-weight: 700;
+      padding: 14px 34px;
+      border-radius: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 6px 20px rgba(0, 112, 209, 0.4);
+      transition: all 0.2s ease;
+    }
+
+    .btn-run:hover:not(:disabled), .btn-run:focus:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 26px rgba(0, 162, 255, 0.6);
+      filter: brightness(1.1);
+      outline: none;
+    }
+
+    .btn-run:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-main);
+      border: 1px solid var(--card-border);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 20px;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover, .btn-secondary:focus {
+      background: rgba(255, 255, 255, 0.14);
+      outline: none;
+    }
+
+    /* Console Window */
+    .console-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .console-header {
+      background: rgba(0, 0, 0, 0.35);
+      border-bottom: 1px solid var(--card-border);
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .console-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .console-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 6px var(--accent);
+    }
+
+    #console {
+      background: var(--console-bg);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      padding: 18px 22px;
+      height: 380px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    .log-line {
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+
+    .log-tag {
+      font-weight: 700;
+    }
+
+    .tag-log { color: #64b5f6; }
+    .tag-success { color: var(--accent); }
+    .tag-error { color: var(--error); }
+
+    .log-msg.error { color: #ff8594; }
+    .log-msg.success { color: #85ffd1; }
+    .log-msg.info { color: #a0c4ff; }
+    .log-msg.log { color: #e2e8f0; }
+
+    /* Payloads View */
+    .controls-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .input-group label {
+      font-size: 13px;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    .input-field {
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid var(--card-border);
+      border-radius: 10px;
+      color: var(--text-main);
+      padding: 10px 14px;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+
+    .input-field:focus {
+      border-color: var(--primary-glow);
+    }
+
+    .payloads-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .payload-card {
+      background: rgba(14, 20, 32, 0.7);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 14px;
+      transition: all 0.2s ease;
+    }
+
+    .payload-card:hover {
+      background: var(--card-hover);
+      border-color: rgba(0, 162, 255, 0.4);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+    }
+
+    .payload-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .payload-ext {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .ext-elf {
+      background: rgba(0, 112, 209, 0.25);
+      color: #60c5ff;
+      border: 1px solid rgba(0, 112, 209, 0.5);
+    }
+
+    .ext-bin {
+      background: rgba(255, 171, 0, 0.2);
+      color: #ffd066;
+      border: 1px solid rgba(255, 171, 0, 0.4);
+    }
+
+    .badge-linux {
+      align-self: flex-start;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(0, 230, 118, 0.15);
+      color: #00e676;
+      border: 1px solid rgba(0, 230, 118, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+    }
+
+    .payload-size {
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    .payload-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+      word-break: break-all;
+    }
+
+    .btn-send-payload {
+      background: rgba(0, 112, 209, 0.2);
+      border: 1px solid rgba(0, 112, 209, 0.4);
+      color: #70c4ff;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-send-payload:hover:not(:disabled), .btn-send-payload:focus:not(:disabled) {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary-glow);
+      box-shadow: 0 4px 12px rgba(0, 112, 209, 0.4);
+      outline: none;
+    }
+
+    .btn-send-payload:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .empty-state, .loading-state {
+      padding: 40px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 15px;
+    }
+
+    /* Linux Guide & About */
+    .info-section {
+      margin-bottom: 24px;
+    }
+
+    .info-section h3 {
+      font-size: 18px;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .info-section ol, .info-section ul {
+      margin-left: 20px;
+      color: var(--text-dim);
+      line-height: 1.7;
+    }
+
+    .info-section code {
+      background: rgba(0, 0, 0, 0.4);
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #70c4ff;
+      font-size: 13px;
+    }
+
+    /* Toast Container */
+    #toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 1000;
+    }
+
+    .toast {
+      background: rgba(16, 22, 36, 0.95);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+      animation: slideIn 0.3s ease-out;
+      max-width: 380px;
+    }
+
+    .toast.toast-success {
+      border-color: rgba(0, 230, 118, 0.6);
+      color: #00e676;
+    }
+
+    .toast.toast-error {
+      border-color: rgba(255, 51, 75, 0.6);
+      color: var(--error);
+    }
+
+    .toast.toast-info {
+      border-color: rgba(0, 162, 255, 0.5);
+      color: #60c5ff;
+    }
+
+    .toast.fade-out {
+      opacity: 0;
+      transform: translateY(10px);
+      transition: all 0.4s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(40px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #fff;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
-  <div id="console"></div>
+
+  <!-- Top Navigation Header -->
+  <header>
+    <div class="brand">
+      <span class="brand-icon">⬢</span>
+      <span class="brand-title">PS5 Relapse Exploit Host</span>
+    </div>
+    <div class="header-badges">
+      <span class="badge badge-fw" id="fw-version-display">Detecting FW...</span>
+      <span class="badge" id="server-ip-display">Connecting...</span>
+      <span class="status-pill state-idle" id="status-pill">Ready to Run</span>
+    </div>
+  </header>
+
+  <!-- Tab Bar -->
+  <div class="nav-container">
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-exploit">
+        <span>🚀</span> Exploit Console
+      </button>
+      <button class="nav-tab" data-tab="tab-payloads">
+        <span>📦</span> Payloads <span class="tab-badge" id="payload-count-badge">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-info">
+        <span>🐧</span> Linux & Guide
+      </button>
+    </div>
+  </div>
+
+  <main>
+    <!-- Tab 1: Exploit Console -->
+    <div class="tab-content active" id="tab-exploit">
+      <div class="card hero-banner">
+        <div class="hero-info">
+          <h2>Run Kernel Jailbreak</h2>
+          <p>Click "Run Jailbreak" to trigger the WebKit and kernel exploit chain. For best stability, wait 30-60 seconds after booting before running.</p>
+        </div>
+        <div class="hero-actions">
+          <button class="btn-run" id="btn-run-jailbreak">
+            <span>▶</span> Run Jailbreak
+          </button>
+          <button class="btn-secondary" id="btn-clear-console">Clear Log</button>
+        </div>
+      </div>
+
+      <div class="card console-card">
+        <div class="console-header">
+          <div class="console-title">
+            <span class="console-dot"></span>
+            Execution Log
+          </div>
+        </div>
+        <div id="console"></div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Payloads Manager -->
+    <div class="tab-content" id="tab-payloads">
+      <div class="card">
+        <div class="controls-row">
+          <div class="input-group">
+            <label for="input-console-ip">Target PS5 IP:</label>
+            <input type="text" id="input-console-ip" class="input-field" placeholder="192.168.x.x" style="width: 160px;">
+          </div>
+          <div class="input-group">
+            <label for="input-console-port">Port:</label>
+            <input type="number" id="input-console-port" class="input-field" value="9021" style="width: 80px;">
+          </div>
+          <div class="input-group" style="flex: 1;">
+            <input type="text" id="input-payload-search" class="input-field" placeholder="Search payloads (e.g. etaHEN, kstuff, linux)..." style="width: 100%;">
+          </div>
+          <button class="btn-secondary" id="btn-refresh-payloads">↻ Refresh</button>
+        </div>
+
+        <div class="payloads-grid" id="payloads-grid">
+          <!-- Dynamically populated payload cards -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 3: Linux & Guide -->
+    <div class="tab-content" id="tab-info">
+      <div class="card">
+        <div class="info-section">
+          <h3>🐧 How to Boot Linux on PS5</h3>
+          <ol>
+            <li>Format an external USB 3.0 / SSD drive with a FAT32/exFAT boot partition and an <code>ext4</code> Linux root filesystem.</li>
+            <li>Connect the USB drive to the rear USB port of the PS5.</li>
+            <li>Copy your Linux loader payload (e.g., <code>ps5-kexec.elf</code>) into the <code>payloads/</code> folder on your host computer.</li>
+            <li>Run the Jailbreak from the <strong>Exploit Console</strong> tab until the ELF loader is active on port <code>9021</code>.</li>
+            <li>Switch to the <strong>Payloads</strong> tab, locate your Linux loader, and click <strong>Send to PS5</strong>.</li>
+            <li>The PS5 kernel will handover execution to the Linux bootloader and start kernel initialization.</li>
+          </ol>
+        </div>
+
+        <div class="info-section">
+          <h3>ℹ️ Exploit Architecture Overview</h3>
+          <ul>
+            <li><strong>WebKit Entrypoint:</strong> Corrupts typedarray buffers via JSC prototype getter leaks and structured clone object pool.</li>
+            <li><strong>Worker ROP:</strong> Hijacks a background Web Worker execution stack via <code>setjmp</code>/<code>longjmp</code> to run FreeBSD syscalls.</li>
+            <li><strong>Kernel UAF:</strong> Asynchronous I/O race condition in <code>aio_multi_wait</code> with KASLR bypass to corrupt sysctl OIDs.</li>
+            <li><strong>POSIX Pipe Bridge:</strong> Fast kernel arbitrary read and write via cross-pipe redirection.</li>
+            <li><strong>Privilege Escalation:</strong> Sets credentials to root (<code>uid = 0</code>), breaks sandbox chroot, and unmasks system calls.</li>
+            <li><strong>ELF Loader:</strong> Listens for incoming payloads on port <code>9021</code>.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Live Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Exploit Engine Scripts -->
   <script src="./src/firmware.js"></script>
   <script src="./src/main.js"></script>
   <script src="./src/rop.js"></script>

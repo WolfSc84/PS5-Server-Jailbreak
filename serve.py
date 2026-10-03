@@ -1,4 +1,5 @@
 import http.server
+import json
 import os
 import socket
 import ssl
@@ -20,6 +21,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
         print(f"[{self.client_address[0]}] {format % args}")
 
+    def send_json(self, code, data):
+        payload = json.dumps(data).encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(payload)
+
     def do_GET(self):
         # Redirect PS5 User's Guide subpath to the root exploit index.html
         if self.path.startswith("/document/"):
@@ -27,7 +38,80 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Location", "/index.html")
             self.end_headers()
             return
+
+        if self.path == "/api/info":
+            self.send_json(200, {
+                "clientIp": self.client_address[0],
+                "serverIp": local_ip(),
+                "defaultPort": 9021
+            })
+            return
+
+        if self.path == "/api/payloads":
+            payloads_dir = ROOT / "payloads"
+            files = []
+            if payloads_dir.exists():
+                for p in sorted(payloads_dir.iterdir()):
+                    if p.is_file() and p.suffix.lower() in [".elf", ".bin"]:
+                        sz = p.stat().st_size
+                        sz_fmt = f"{sz / (1024*1024):.2f} MB" if sz >= 1024*1024 else f"{sz / 1024:.1f} KB"
+                        files.append({
+                            "name": p.name,
+                            "size": sz,
+                            "formattedSize": sz_fmt,
+                            "ext": p.suffix.lower()
+                        })
+            self.send_json(200, {"payloads": files})
+            return
+
         super().do_GET()
+
+    def do_POST(self):
+        if self.path == "/api/send-payload":
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length).decode("utf-8")
+                data = json.loads(body)
+                name = data.get("name", "")
+                port = int(data.get("port", 9021))
+                host = data.get("host") or self.client_address[0]
+
+                payload_path = (ROOT / "payloads" / name).resolve()
+                if not payload_path.is_file() or not str(payload_path).startswith(str(ROOT / "payloads")):
+                    self.send_json(400, {"success": False, "error": f"Invalid file: {name}"})
+                    return
+
+                file_bytes = payload_path.read_bytes()
+                print(f"[*] Sending payload '{name}' ({len(file_bytes)} bytes) to {host}:{port}...")
+
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(8.0)
+                    s.connect((host, port))
+                    s.sendall(file_bytes)
+
+                print(f"[+] Successfully sent '{name}' to {host}:{port}")
+                self.send_json(200, {
+                    "success": True,
+                    "message": f"Successfully sent '{name}' ({len(file_bytes):,} bytes) to {host}:{port}"
+                })
+            except ConnectionRefusedError:
+                print(f"[!] Connection refused at {host}:{port} - is elfldr listening?")
+                self.send_json(500, {
+                    "success": False,
+                    "error": f"Connection refused at {host}:{port}. Make sure the exploit ran and elfldr is listening on port 9021!"
+                })
+            except socket.timeout:
+                print(f"[!] Timed out connecting to {host}:{port}")
+                self.send_json(500, {
+                    "success": False,
+                    "error": f"Connection timed out reaching {host}:{port}."
+                })
+            except Exception as e:
+                print(f"[!] Error sending payload: {e}")
+                self.send_json(500, {"success": False, "error": str(e)})
+            return
+
+        self.send_json(404, {"error": "Not Found"})
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
