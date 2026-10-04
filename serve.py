@@ -1,9 +1,11 @@
 import http.server
 import json
 import os
+import signal
 import socket
 import ssl
 import subprocess
+import sys
 import threading
 from pathlib import Path
 
@@ -181,6 +183,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 def local_ip():
+    env_ip = os.environ.get("SERVER_IP") or os.environ.get("HOST_IP")
+    if env_ip:
+        return env_ip.strip()
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.connect(("8.8.8.8", 80))
@@ -315,6 +320,13 @@ def main():
     print(f"  2. Click the link on your PS5 to open it directly in the web browser.")
     print("----------------------------\n")
     print("Server running. Press Ctrl+C to stop.")
+
+    def shutdown_handler(signum, frame):
+        print("\nShutting down servers gracefully...")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown_handler)
+    signal.signal(signal.SIGTERM, shutdown_handler)
 
     try:
         while True:

@@ -1,0 +1,20 @@
+services:
+  relapse-exploit:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: relapse-exploit:latest
+    container_name: relapse-exploit
+    restart: unless-stopped
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      - "53:53/udp"
+      - "53:53/tcp"
+    volumes:
+      - ./payloads:/app/payloads:Z
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Set your host machine's LAN IP address so the DNS and web servers announce the proper IP to the PS5.
+      # You can override this in an .env file or with: SERVER_IP=192.168.x.x podman-compose up
+      - SERVER_IP=${SERVER_IP:-}
