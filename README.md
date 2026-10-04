@@ -375,7 +375,7 @@ flowchart LR
     SERVER <--> PAYLOADS_VOL
 ```
 
-- **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile)** (and symlinked **[Dockerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Dockerfile)**):
+- **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile)**:
   - **Base image:** `python:3.12-alpine` with `openssl` and `ca-certificates` for SSL certificate generation.
   - **Copies static assets:** [index.html](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/index.html), [serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py), `src/`, and `offsets/`.
   - **Exposes ports:** `80/tcp`, `443/tcp`, `53/tcp`, and `53/udp`.
@@ -389,7 +389,7 @@ flowchart LR
   - **Mounts the host directory `./payloads:/app/payloads:Z` as a live volume:** (with `:Z` for SELinux / Podman permission handling), allowing you to add or delete `.elf` and `.bin` payloads on the host without rebuilding the container.
   - **Passes `SERVER_IP`:** the built-in DNS server correctly advertises your host's LAN IP to the PS5.
 
-- **[.containerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.containerignore)** & **[.dockerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.dockerignore)**:
+- **[.containerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.containerignore)**:
   - Excludes `.git`, `__pycache__`, certificates, and the payload binaries from the image build context so builds are instant and payloads stay purely in the live volume.
 
 - **[serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py)** enhancements:
@@ -578,11 +578,9 @@ Relapse-Exploit/
 ├── index.html                   # Entry point webpage & script loader
 ├── serve.py                     # Multi-protocol server (HTTP 80, HTTPS 443, DNS 53, REST API)
 ├── Containerfile                # Podman container build definition (python:3.12-alpine)
-├── Dockerfile                   # Symlink to Containerfile
 ├── compose.yaml                 # Podman Compose service definition
 ├── docker-compose.yml           # Symlink to compose.yaml
 ├── .containerignore             # Podman build ignore rules
-├── .dockerignore                # Docker build ignore rules
 ├── .env.example                 # Environment variable template for host LAN IP configuration
 ├── .env                         # Active environment configuration
 ├── setup.sh                     # Multi-distro automated host setup & runner (Fedora/Arch/Debian)

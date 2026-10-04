@@ -1,9 +1,0 @@
-.git
-.gitignore
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-*.pem
-payloads/*
-!payloads/.gitkeep
