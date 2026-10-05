@@ -401,7 +401,7 @@ flowchart LR
 ### 5.2 How to Run
 
 #### Option 1: Automated One-Click Setup Script (`setup.sh` - Recommended)
-The included script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically detects your distro (**Fedora / RHEL**, **Debian / Ubuntu**, or **Arch Linux**), installs `podman` and `podman-compose`, disables conflicting `dnsmasq`, opens firewall ports (80, 443, 53), detects your host LAN IP, configures `.env`, builds the image, and validates that HTTP 200 is responding:
+The included script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically detects your distro (**Fedora / RHEL**, **Debian / Ubuntu**, or **Arch Linux**), installs `podman` and `podman-compose`, disables conflicting `dnsmasq`, opens firewall ports (80, 443, 53), configures sysctl port unprivilege, detects your host LAN IP, configures `.env`, builds the image, and validates that HTTP 200 is responding:
 
 ```bash
 cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
@@ -409,36 +409,61 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
-#### Option 2: Using `sudo podman-compose` Manually
-Because ports `80`, `443`, and `53` are privileged Linux ports (< 1024), the quickest way to bind them without modifying system sysctls is with `sudo`:
+---
 
-```bash
-cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
+#### Solution 1: Allow Rootless Podman to Bind Low Ports (Recommended)
+You can tell the Linux kernel to allow rootless users to bind ports starting from 53 upwards:
 
-# Build and start in background
-sudo podman-compose up -d --build
-
-# View logs
-sudo podman-compose logs -f
-
-# Stop container
-sudo podman-compose down
-```
-
-#### Option 3: Running Rootless (Without `sudo`)
-If you prefer running rootless with standard `podman-compose`:
-
-1. Allow unprivileged processes to bind ports starting from 53:
+1. **Set the sysctl parameter (immediate):**
    ```bash
    sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
    ```
-   *(To make this permanent across reboots, add `net.ipv4.ip_unprivileged_port_start = 53` to `/etc/sysctl.d/99-podman-ports.conf`)*
 
-2. Start the container:
+2. **Make it permanent across reboots:**
    ```bash
-   podman-compose up -d --build
+   echo "net.ipv4.ip_unprivileged_port_start = 53" | sudo tee /etc/sysctl.d/99-podman-ports.conf
+   ```
+
+3. **Remove the failed container and launch again:**
+   ```bash
+   podman rm -f relapse-exploit
+   podman-compose -f compose.yaml up -d
+   ```
+
+4. **Verify logs:**
+   ```bash
    podman-compose logs -f
    ```
+
+---
+
+#### Solution 2: Run with `sudo`
+If you do not want to change system sysctl settings, run the compose stack with sudo (root can bind ports < 1024 without restrictions):
+
+1. **Remove the created container from the rootless namespace:**
+   ```bash
+   podman rm -f relapse-exploit
+   ```
+
+2. **Run with `sudo`:**
+   ```bash
+   sudo podman-compose -f compose.yaml up -d
+   ```
+
+3. **View logs or stop:**
+   ```bash
+   sudo podman-compose logs -f
+   sudo podman-compose down
+   ```
+
+---
+
+#### Or: Use the Automated Setup Script
+The [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) script we created configures this sysctl setting, verifies firewall rules, and starts the container automatically:
+
+```bash
+sudo ./setup.sh
+```
 
 ---
 
