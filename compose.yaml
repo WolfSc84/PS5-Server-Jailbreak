@@ -9,8 +9,7 @@ services:
     ports:
       - "80:80/tcp"
       - "443:443/tcp"
-      - "53:53/udp"
-      - "53:53/tcp"
+      - "${SERVER_IP:-0.0.0.0}:53:53/udp"
     volumes:
       - ./payloads:/app/payloads:Z
     environment:

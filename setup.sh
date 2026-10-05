@@ -191,24 +191,59 @@ EOF
 run_container() {
     log_info "Building and launching Relapse-Exploit container via podman-compose..."
 
+    # Enable and start podman.socket so any docker-compatible compose plugins work seamlessly
+    if command -v systemctl &>/dev/null; then
+        systemctl enable --now podman.socket >/dev/null 2>&1 || true
+        # Also ensure /var/run/docker.sock points to /run/podman/podman.sock if docker daemon is not present
+        if [ ! -e /var/run/docker.sock ] && [ -e /run/podman/podman.sock ]; then
+            ln -sf /run/podman/podman.sock /var/run/docker.sock 2>/dev/null || true
+        fi
+    fi
+    export DOCKER_HOST="${DOCKER_HOST:-unix:///run/podman/podman.sock}"
+    export PODMAN_COMPOSE_PROVIDER="${PODMAN_COMPOSE_PROVIDER:-/usr/bin/podman-compose}"
+
     # Determine compose command
     if command -v podman-compose &>/dev/null; then
         COMPOSE_CMD="podman-compose"
     elif podman compose version &>/dev/null 2>&1; then
         COMPOSE_CMD="podman compose"
     else
-        log_error "Neither 'podman-compose' nor 'podman compose' is available."
-        exit 1
+        COMPOSE_CMD=""
     fi
 
     # Ensure payloads directory exists on host
     mkdir -p ./payloads
 
-    # Stop any previous instance
-    $COMPOSE_CMD down 2>/dev/null || true
+    # Stop and clean up any previous instance
+    if [ -n "$COMPOSE_CMD" ]; then
+        $COMPOSE_CMD -f compose.yaml down 2>/dev/null || true
+    fi
+    podman rm -f relapse-exploit 2>/dev/null || true
 
     # Launch with build
-    $COMPOSE_CMD up -d --build
+    COMPOSE_SUCCESS=false
+    if [ -n "$COMPOSE_CMD" ]; then
+        if $COMPOSE_CMD -f compose.yaml up -d --build; then
+            COMPOSE_SUCCESS=true
+        else
+            log_warn "Compose invocation failed; attempting direct podman container run..."
+        fi
+    fi
+
+    if [ "$COMPOSE_SUCCESS" = false ]; then
+        log_info "Building image with native podman build..."
+        podman build -t relapse-exploit:latest -f Containerfile .
+        log_info "Starting container with native podman run..."
+        podman run -d --name relapse-exploit \
+            --restart unless-stopped \
+            -p 80:80/tcp \
+            -p 443:443/tcp \
+            -p "${DETECTED_IP}:53:53/udp" \
+            -v "${SCRIPT_DIR}/payloads:/app/payloads:Z" \
+            -e SERVER_IP="${DETECTED_IP}" \
+            -e PYTHONUNBUFFERED=1 \
+            relapse-exploit:latest
+    fi
 
     log_success "Container started."
 }
