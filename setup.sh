@@ -55,6 +55,8 @@ detect_os() {
         DISTRO_FAMILY="debian"
     elif [[ "$OS_ID" =~ ^(arch|manjaro|endeavouros)$ ]] || [[ "$OS_LIKE" =~ arch ]]; then
         DISTRO_FAMILY="arch"
+    elif [[ "$OS_ID" =~ ^(opensuse|sles) ]] || [[ "$OS_LIKE" =~ (suse|opensuse) ]]; then
+        DISTRO_FAMILY="suse"
     else
         log_warn "Unrecognized Linux distribution family ($OS_ID / $OS_LIKE)."
         log_warn "Attempting to continue using generic package fallback..."
@@ -77,14 +79,17 @@ install_dependencies() {
             apt-get update -y
             apt-get install -y podman curl iproute2
             # Try to install podman-compose via apt, fallback to pip3 if not packaged
-            if ! apt-get install -y podman-compose; then
-                log_info "podman-compose not available via apt; installing via python3-pip..."
-                apt-get install -y python3-pip python3-setuptools
-                pip3 install --break-system-packages podman-compose 2>/dev/null || pip3 install podman-compose
+            if ! apt-get install -y podman-compose 2>/dev/null; then
+                log_info "podman-compose not available via apt; attempting installation via python3-pip..."
+                apt-get install -y python3-pip python3-setuptools 2>/dev/null || true
+                pip3 install --break-system-packages podman-compose 2>/dev/null || pip3 install podman-compose 2>/dev/null || true
             fi
             ;;
         arch)
             pacman -Sy --noconfirm --needed podman podman-compose curl iproute2
+            ;;
+        suse)
+            zypper install -y podman podman-compose curl iproute2
             ;;
         generic)
             log_warn "Please ensure 'podman', 'podman-compose', and 'curl' are installed manually."
@@ -100,20 +105,20 @@ install_dependencies() {
 }
 
 # ------------------------------------------------------------------------------
-# 4. Resolve Port 53 Conflicts (Disable dnsmasq)
+# 4. Resolve Port 53 Conflicts (Disable dnsmasq / bind9)
 # ------------------------------------------------------------------------------
 configure_dns_services() {
     log_info "Ensuring host DNS services do not conflict with container port 53..."
 
-    # Check for dnsmasq
-    if systemctl list-unit-files | grep -qw "dnsmasq.service"; then
-        if systemctl is-active --quiet dnsmasq; then
-            log_warn "Active dnsmasq detected. Stopping and disabling to release port 53 for the container..."
-            systemctl stop dnsmasq
-            systemctl disable dnsmasq
-            log_success "dnsmasq stopped and disabled."
+    # Check and disable conflicting host DNS daemons
+    for svc in dnsmasq named bind9; do
+        if systemctl is-active --quiet "$svc" 2>/dev/null; then
+            log_warn "Active $svc detected. Stopping and disabling to release port 53 for the container..."
+            systemctl stop "$svc" 2>/dev/null || true
+            systemctl disable "$svc" 2>/dev/null || true
+            log_success "$svc stopped and disabled."
         fi
-    fi
+    done
 
     # Allow unprivileged rootless port binding from port 53 upwards
     sysctl -w net.ipv4.ip_unprivileged_port_start=53 >/dev/null 2>&1 || true

@@ -381,13 +381,15 @@ flowchart LR
   - **Exposes ports:** `80/tcp`, `443/tcp`, `53/tcp`, and `53/udp`.
   - **Sets `PYTHONUNBUFFERED=1`:** logs and payloads appear in real-time without output buffering.
 
-- **[compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml)** (and symlinked **[docker-compose.yml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/docker-compose.yml)**):
+- **[compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml)**:
   - **Configures the `relapse-exploit` service with port bindings:**
     - `80:80/tcp` (HTTP)
     - `443:443/tcp` (HTTPS)
-    - `53:53/udp` & `53:53/tcp` (DNS responder for PS5 manual redirection)
-  - **Mounts the host directory `./payloads:/app/payloads:Z` as a live volume:** (with `:Z` for SELinux / Podman permission handling), allowing you to add or delete `.elf` and `.bin` payloads on the host without rebuilding the container.
+    - `${SERVER_IP:-0.0.0.0}:53:53/udp` (DNS responder for PS5 redirection)
+  - **Coexistence with Host Resolvers:** Binds UDP port 53 specifically to `${SERVER_IP}` (your host LAN IP). This avoids conflicts with local stub resolvers like `systemd-resolved` (which listen on `127.0.0.53:53` across Fedora, Debian, Ubuntu, and Arch), allowing the container to serve the console without disrupting host DNS.
+  - **Mounts the host directory `./payloads:/app/payloads:Z` as a live volume:** (with `:Z` for SELinux / Podman permission handling), allowing you to add or delete `.elf`, `.bin`, and `.pkg` payloads on the host without rebuilding the container.
   - **Passes `SERVER_IP`:** the built-in DNS server correctly advertises your host's LAN IP to the PS5.
+  - **Single Compose Source:** Uses `compose.yaml` exclusively (redundant `docker-compose.yml` duplicates have been removed to eliminate compose CLI specification warnings).
 
 - **[.containerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.containerignore)**:
   - Excludes `.git`, `__pycache__`, certificates, and the payload binaries from the image build context so builds are instant and payloads stay purely in the live volume.
@@ -401,7 +403,13 @@ flowchart LR
 ### 5.2 How to Run
 
 #### Option 1: Automated One-Click Setup Script (`setup.sh` - Recommended)
-The included script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically detects your distro (**Fedora / RHEL**, **Debian / Ubuntu**, or **Arch Linux**), installs `podman` and `podman-compose`, disables conflicting `dnsmasq`, opens firewall ports (80, 443, 53), configures sysctl port unprivilege, detects your host LAN IP, configures `.env`, builds the image, and validates that HTTP 200 is responding:
+The included script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) provides a universal, zero-friction installer across all major Linux distributions:
+- **Fedora / RHEL / CentOS / AlmaLinux / Rocky**
+- **Debian / Ubuntu / Linux Mint / Pop!_OS**
+- **Arch Linux / Manjaro / EndeavourOS**
+- **openSUSE / SLES**
+
+It handles package dependencies, firewall configuration, DNS conflict mitigation, Docker API socket compatibility, LAN IP detection, and launches the container with automatic health verification:
 
 ```bash
 cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
@@ -411,125 +419,134 @@ sudo ./setup.sh
 
 ---
 
-#### Solution 1: Allow Rootless Podman to Bind Low Ports (Recommended)
-You can tell the Linux kernel to allow rootless users to bind ports starting from 53 upwards:
+#### Option 2: Rootless Podman Deployment (Unprivileged User)
+If you prefer running containers without `sudo` as a standard non-root user:
 
-1. **Set the sysctl parameter (immediate):**
+1. **Allow Unprivileged Port Binding (< 1024):**
+   Linux restricts ports below 1024 to root by default. Allow non-root users to bind port 53 upwards:
    ```bash
    sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
-   ```
-
-2. **Make it permanent across reboots:**
-   ```bash
    echo "net.ipv4.ip_unprivileged_port_start = 53" | sudo tee /etc/sysctl.d/99-podman-ports.conf
    ```
 
-3. **Remove the failed container and launch again:**
+2. **Launch with Podman Compose:**
    ```bash
-   podman rm -f relapse-exploit
+   podman rm -f relapse-exploit 2>/dev/null || true
    podman-compose -f compose.yaml up -d
    ```
 
-4. **Verify logs:**
+3. **Monitor Live Server Logs:**
    ```bash
-   podman-compose logs -f
+   podman-compose -f compose.yaml logs -f
    ```
 
 ---
 
-#### Solution 2: Run with `sudo`
-If you do not want to change system sysctl settings, run the compose stack with sudo (root can bind ports < 1024 without restrictions):
+#### Option 3: Rootful Podman / Compose Deployment (with Docker Socket Compatibility)
+If your system's `podman-compose` CLI provider is linked to Docker Compose v2 (such as on Fedora or Debian systems where `podman-compose` points to Docker Compose), it expects a Docker-compatible API socket:
 
-1. **Remove the created container from the rootless namespace:**
+1. **Enable the Podman Socket:**
    ```bash
-   podman rm -f relapse-exploit
+   sudo systemctl enable --now podman.socket
+   sudo ln -sf /run/podman/podman.sock /var/run/docker.sock
+   export DOCKER_HOST="unix:///run/podman/podman.sock"
    ```
 
-2. **Run with `sudo`:**
+2. **Launch Container:**
    ```bash
-   sudo podman-compose -f compose.yaml up -d
+   sudo podman-compose -f compose.yaml up -d --build
    ```
 
-3. **View logs or stop:**
+3. **Direct Podman Fallback (Native Build & Run):**
+   If any compose wrapper encounters socket issues on your distro, run natively via standard Podman:
    ```bash
-   sudo podman-compose logs -f
-   sudo podman-compose down
+   podman build -t relapse-exploit:latest -f Containerfile .
+   podman run -d --name relapse-exploit \
+       --restart unless-stopped \
+       -p 80:80/tcp \
+       -p 443:443/tcp \
+       -p "192.168.50.194:53:53/udp" \
+       -v "$(pwd)/payloads:/app/payloads:Z" \
+       -e SERVER_IP="192.168.50.194" \
+       -e PYTHONUNBUFFERED=1 \
+       relapse-exploit:latest
    ```
-
----
-
-#### Or: Use the Automated Setup Script
-The [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) script we created configures this sysctl setting, verifies firewall rules, and starts the container automatically:
-
-```bash
-sudo ./setup.sh
-```
 
 ---
 
 ### 5.3 Configuring the Host IP
 
-Your host machine's current LAN IP (`192.168.50.194`) is pre-configured in **[.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env)** (and **[.env.example](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env.example)**). If your IP changes:
+Your host machine's current LAN IP (`192.168.50.194`) is configured in **[.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env)** (and **[.env.example](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env.example)**). If your network IP changes:
 
 ```ini
 # In .env
 SERVER_IP=192.168.50.194
 ```
 
-Or specify it directly when launching:
+Or pass it dynamically at runtime:
 
 ```bash
-SERVER_IP=192.168.50.194 sudo podman-compose up -d
+SERVER_IP=192.168.50.194 podman-compose -f compose.yaml up -d
 ```
 
 ---
 
 ### 5.4 Managing Payloads Dynamically
 
-Any files added, updated, or removed in `/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit/payloads` are synced immediately to `/app/payloads` inside the running container and will appear instantly on the web interface without restarting the container.
+Any files added, updated, or removed in `/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit/payloads` are synced immediately to `/app/payloads` inside the running container and appear instantly on the web interface without restarting the container:
+
+- **Volume Mount:** `./payloads:/app/payloads:Z`
+- **Supported Formats:** `.elf`, `.bin`, `.pkg`, `.exfat`
+- **Git LFS Enabled:** Large assets (`*.pkg`, `*.exfat`) are tracked via Git Large File Storage (LFS).
 
 Supported payload categories recognized by the web UI:
 - **Homebrew Enablers (`etaHEN`)**: Activates kstuff, FTP server, cheats, and debug settings.
 - **Kernel Patchers (`kstuff`)**: Enables execution of decrypted fself binaries and fake packages (`fpkg`).
 - **Linux Bootloaders (`kexec`)**: Boots Linux (SteamOS / Ubuntu / Fedora) from USB.
 - **Filesystem Mounters (`shadowmount`)**: Mounts system and game partitions for modding and dumping.
-- **Payload Managers & Loaders (`elfldr`, `pldmgr`, `legacyjb`)**: Stages and executes payloads over port 9021.
+- **Payload Managers & Loaders (`elfldr`, `pldmgr`, `legacyjb`, `PS5SX`)**: Stages and executes payloads over port 9021.
 
 ---
 
 ### 5.5 Host Network & Service Configuration FAQ
 
-Ran command: `systemctl is-active dnsmasq 2>/dev/null || true`  
-Ran command: `firewall-cmd --list-services 2>/dev/null || true`
+#### 1. Do you need `firewall-cmd` or `ufw` on the host?
 
-#### 1. Do you need `firewall-cmd` on the host?
-
-**YES, you definitely need that.**
-* **Why:** Containers sit behind the Linux host network stack. Even though Podman forwards the container ports, if `firewalld` blocks incoming packets from your home LAN (where your PS5 is connected), the PS5 will not be able to reach the server.
-* **Current Status:** We checked your host and verified that `dns`, `http`, and `https` are **already open and active**:
+**YES, you definitely need host firewall rules.**
+* **Why:** Containers sit behind the Linux host network stack. Even though Podman forwards container ports, if the host firewall blocks incoming LAN packets from the PlayStation 5, the console cannot connect.
+* **Firewalld (Fedora / RHEL / openSUSE):**
   ```bash
-  $ firewall-cmd --list-services
-  dhcpv6-client dns http https mdns samba-client ssh
+  sudo firewall-cmd --add-service=dns --add-service=http --add-service=https --permanent
+  sudo firewall-cmd --add-port=80/tcp --add-port=443/tcp --add-port=53/udp --permanent
+  sudo firewall-cmd --reload
+  ```
+* **UFW (Ubuntu / Debian):**
+  ```bash
+  sudo ufw allow 80/tcp
+  sudo ufw allow 443/tcp
+  sudo ufw allow 53/udp
+  sudo ufw reload
   ```
 
 ---
 
-#### 2. Do you need `dnsmasq` on the host?
+#### 2. Do you need `dnsmasq` or `bind9` on the host?
 
-**NO, you do NOT need `dnsmasq` anymore!**
-* **Why:** [serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py#L224-L280) inside the container already includes its own **built-in DNS server**. It listens on port 53 and automatically responds to the PS5's queries for `manuals.playstation.net` (and all other lookups) by returning your `SERVER_IP` (`192.168.50.194`).
-* **Important:** If `dnsmasq` were running on the host, it would occupy port 53 and cause a port conflict (`Address already in use`), preventing the container from starting.
-* **Current Status:** We checked your host and `dnsmasq` is currently **inactive**, which is ideal. Keep it stopped/disabled:
+**NO, you do NOT need `dnsmasq` or `bind9`!**
+* **Why:** [serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py#L224-L280) inside the container includes its own **built-in DNS server**. It listens on port 53 and responds to the PS5's queries for `manuals.playstation.net` by returning your `SERVER_IP`.
+* **Important:** If `dnsmasq` or `bind9` is active on the host, it will monopolize port 53 and cause an `Address already in use` conflict. Keep them disabled:
   ```bash
-  sudo systemctl stop dnsmasq 2>/dev/null
-  sudo systemctl disable dnsmasq 2>/dev/null
+  sudo systemctl stop dnsmasq bind9 named 2>/dev/null || true
+  sudo systemctl disable dnsmasq bind9 named 2>/dev/null || true
   ```
+* **What about `systemd-resolved`?**  
+  `systemd-resolved` binds to loopback addresses `127.0.0.53:53` and `127.0.0.54:53`. Because our container binds port 53 to your LAN IP (`192.168.50.194:53:53/udp`), **there is NO conflict with `systemd-resolved`**, and your host machine's internet resolution remains undisturbed!
 
 ---
 
 #### 3. Are the required ports (80, 443, 53 UDP/TCP) enabled in the container?
 
-**YES, all required ports are mapped and enabled:**
+**YES, all required ports are mapped and verified:**
 
 1. **In [Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile#L20-L24):**
    ```dockerfile
@@ -542,25 +559,24 @@ Ran command: `firewall-cmd --list-services 2>/dev/null || true`
 2. **In [compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml#L9-L14):**
    ```yaml
    ports:
-     - "80:80/tcp"      # HTTP (Exploit site & REST API)
-     - "443:443/tcp"    # HTTPS (PS5 User's Guide SSL delivery)
-     - "53:53/udp"      # DNS queries from PS5 (Primary)
-     - "53:53/tcp"      # DNS fallback
+     - "80:80/tcp"                    # HTTP (Exploit web page & REST APIs)
+     - "443:443/tcp"                  # HTTPS (PS5 User's Guide SSL delivery)
+     - "${SERVER_IP:-0.0.0.0}:53:53/udp" # DNS queries from PS5
    ```
 
 3. **In the application ([serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py)):**
    - **Port 80 (TCP):** Serves `index.html`, JavaScript exploit files, and `/api/payloads`.
    - **Port 443 (TCP):** Serves over HTTPS with self-signed SSL for `manuals.playstation.net`.
-   - **Port 53 (UDP):** Built-in DNS responder directing PS5 traffic to `192.168.50.194`.
+   - **Port 53 (UDP):** Built-in DNS responder directing PS5 traffic to `SERVER_IP`.
 
 #### Summary Comparison
 
 | Component | Handled by Host | Handled by Container | Notes |
 | :--- | :---: | :---: | :--- |
-| **Firewall rules (80, 443, 53)** | **Yes** (`firewall-cmd`) | — | Necessary so the host OS permits incoming LAN traffic from the PS5. |
+| **Firewall rules (80, 443, 53)** | **Yes** (`firewall-cmd` / `ufw`) | — | Necessary so the host OS permits incoming LAN traffic from the PS5. |
 | **HTTP Web Server (80)** | — | **Yes** (`serve.py`) | Mapped via `80:80/tcp`. |
 | **HTTPS Web Server (443)** | — | **Yes** (`serve.py`) | Mapped via `443:443/tcp`. |
-| **DNS Server (53)** | **No** (Do not run `dnsmasq`) | **Yes** (`serve.py`) | Built into `serve.py`; mapped via `53:53/udp` & `53:53/tcp`. |
+| **DNS Server (53)** | **No** (Do not run `dnsmasq`) | **Yes** (`serve.py`) | Built into `serve.py`; mapped via `${SERVER_IP}:53:53/udp`. |
 
 ---
 
@@ -571,21 +587,27 @@ The automated setup and launch script [setup.sh](file:///home/wolfgangsan/Reposi
 #### Features of [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh):
 - **Multi-Distro OS Identification (`/etc/os-release`):**
   - **Fedora / RHEL / CentOS / AlmaLinux / Rocky:** Uses `dnf` to install `podman`, `podman-compose`, `firewalld`, and `curl`.
-  - **Debian / Ubuntu / Linux Mint / Pop!_OS:** Uses `apt-get` to install `podman`, `podman-compose` (or pip fallback), `ufw`, and `curl`.
+  - **Debian / Ubuntu / Linux Mint / Pop!_OS:** Uses `apt-get` to install `podman`, `podman-compose` (with automatic pip fallback), `ufw`, and `curl`.
   - **Arch Linux / Manjaro / EndeavourOS:** Uses `pacman -Sy --needed` to install `podman`, `podman-compose`, and `curl`.
-- **Conflict Prevention on Port 53:**
-  - Detects if `dnsmasq` is present or running, and automatically runs `systemctl stop dnsmasq` and `systemctl disable dnsmasq` to free port 53.
-  - Sets `sysctl -w net.ipv4.ip_unprivileged_port_start=53` and persists it in `/etc/sysctl.d/99-podman-ports.conf`.
+  - **openSUSE / SLES:** Uses `zypper` to install `podman`, `podman-compose`, and `curl`.
+- **Port 53 Conflict Resolution & Sysctl Optimization:**
+  - Automatically identifies and stops active `dnsmasq`, `bind9`, or `named` daemons to free port 53.
+  - Sets `net.ipv4.ip_unprivileged_port_start = 53` in memory and persists to `/etc/sysctl.d/99-podman-ports.conf`.
 - **Automated Host Firewall Setup:**
-  - For `firewalld`: Opens `dns`, `http`, and `https` services plus ports `80/tcp`, `443/tcp`, `53/udp`, and `53/tcp` permanently and reloads.
-  - For `ufw`: Allows `80/tcp`, `443/tcp`, `53/udp`, and `53/tcp` and reloads.
-- **LAN IP Auto-Detection & `.env` Generation:**
+  - For `firewalld`: Permanently opens `dns`, `http`, `https` services and `80/tcp`, `443/tcp`, `53/udp` ports, then reloads.
+  - For `ufw`: Allows `80/tcp`, `443/tcp`, and `53/udp`, then reloads.
+- **Docker Socket & Compose API Compatibility:**
+  - Automatically enables and starts `podman.socket` via systemd.
+  - Ensures `/var/run/docker.sock` points to `/run/podman/podman.sock` for Docker Compose v2 CLI plugins.
+  - Sets `DOCKER_HOST="unix:///run/podman/podman.sock"`.
+  - Includes a direct native `podman build` and `podman run` fallback if compose providers report unexpected socket errors.
+- **LAN IP Auto-Detection & `.env` Configuration:**
   - Discovers the host's actual default route LAN IP (avoiding local loopbacks and container bridges).
-  - Generates or updates [.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env) with `SERVER_IP=<detected_lan_ip>`.
-- **Container Orchestration & Execution Guarantee:**
-  - Runs `podman-compose up -d --build` with live payload volume mounting (`./payloads:/app/payloads:Z`).
+  - Updates [.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env) with `SERVER_IP=<detected_lan_ip>`.
+- **Container Health Check & Verification:**
+  - Launches container with live payload volume mounting (`./payloads:/app/payloads:Z`).
   - Polls `http://127.0.0.1:80/api/info` to verify the container has started and responds with `HTTP 200 OK`.
-  - Displays a formatted operational banner with the detected IP and PS5 connection instructions.
+  - Displays a formatted operational banner with connection instructions for the PlayStation 5.
 
 #### How to Run the Setup Script
 
@@ -604,11 +626,10 @@ Relapse-Exploit/
 ├── serve.py                     # Multi-protocol server (HTTP 80, HTTPS 443, DNS 53, REST API)
 ├── Containerfile                # Podman container build definition (python:3.12-alpine)
 ├── compose.yaml                 # Podman Compose service definition
-├── docker-compose.yml           # Symlink to compose.yaml
 ├── .containerignore             # Podman build ignore rules
 ├── .env.example                 # Environment variable template for host LAN IP configuration
 ├── .env                         # Active environment configuration
-├── setup.sh                     # Multi-distro automated host setup & runner (Fedora/Arch/Debian)
+├── setup.sh                     # Multi-distro automated host setup & runner (Fedora/Debian/Arch/openSUSE)
 ├── Workflow.png                 # Architectural visual diagram
 ├── README.md                    # Unified project documentation, architecture, deployment & credits
 ├── LICENSE                      # Project license
