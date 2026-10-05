@@ -1,19 +1,62 @@
 # PS5 Relapse Exploit
 
 > **Supported Firmware Scope:** PlayStation 5 System Software `7.00` through `13.60` (33 supported firmware profiles)  
-> **Target Output:** Arbitrary Kernel R/W, Root Privileges (`uid = 0`), Full Sandbox Escape, and ELF Loader Daemon listening on port `9021`.
+> **Target Output:** Arbitrary Kernel R/W, Root Privileges (`uid = 0`), Full Sandbox Escape, and ELF Loader Daemon listening on port `9021`.  
+> **Containerization Runtime:** Rootless & Rootful Podman, Podman Compose, Multi-Distro Linux (`Fedora`, `Debian`, `Ubuntu`, `Arch`, `openSUSE`).
 
 ![Relapse Exploit Workflow](Workflow.png)
 
-## Stability Notes
-- **WebKit Stage:** May require several attempts depending on memory layout; reload the browser if the page stalls or freezes.
-- **Kernel Stage:** The asynchronous I/O race condition may occasionally hang or trigger a kernel panic. If this occurs, restart the console and retry.
+## Stability & Operating Notes
+- **WebKit Userland Stage:** JavaScriptCore heap grooming and structured clone deserialization may require a few attempts depending on initial memory layout. If the browser tab stalls or shows an "Out of Memory" alert, reload the page.
+- **Kernel UAF Stage:** The asynchronous I/O (`aio_multi_wait`) race condition timing window is tuned for stability. In the rare event of a kernel panic, the console will safely reboot to the main dashboard.
 
 ---
 
-## 1. Executive Architecture Overview
+## 1. Supported Firmware Matrix
 
-The **Relapse Exploit** (`Relapse-Exploit`) is a multi-stage jailbreak toolchain for the PlayStation 5. The exploit chains together:
+The exploit engine dynamically parses the browser `User-Agent` string to detect the exact PlayStation 5 system software version and automatically loads the matching gadget, syscall, and symbol offset profile from [`offsets/<firmware>.js`](offsets/):
+
+| Firmware | WebKit Exploitation | Kernel UAF Exploit | Offset Profile | Status |
+| :---: | :---: | :---: | :---: | :---: |
+| **7.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.00.js`](offsets/7.00.js) | Supported |
+| **7.01** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.01.js`](offsets/7.01.js) | Supported |
+| **7.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.20.js`](offsets/7.20.js) | Supported |
+| **7.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.40.js`](offsets/7.40.js) | Supported |
+| **7.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.60.js`](offsets/7.60.js) | Supported |
+| **7.61** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/7.61.js`](offsets/7.61.js) | Supported |
+| **8.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/8.00.js`](offsets/8.00.js) | Supported |
+| **8.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/8.20.js`](offsets/8.20.js) | Supported |
+| **8.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/8.40.js`](offsets/8.40.js) | Supported |
+| **8.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/8.60.js`](offsets/8.60.js) | Supported |
+| **9.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/9.00.js`](offsets/9.00.js) | Supported |
+| **9.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/9.20.js`](offsets/9.20.js) | Supported |
+| **9.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/9.40.js`](offsets/9.40.js) | Supported |
+| **9.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/9.60.js`](offsets/9.60.js) | Supported |
+| **10.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/10.00.js`](offsets/10.00.js) | Supported |
+| **10.01** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/10.01.js`](offsets/10.01.js) | Supported |
+| **10.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/10.20.js`](offsets/10.20.js) | Supported |
+| **10.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/10.40.js`](offsets/10.40.js) | Supported |
+| **10.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/10.60.js`](offsets/10.60.js) | Supported |
+| **11.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/11.00.js`](offsets/11.00.js) | Supported |
+| **11.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/11.20.js`](offsets/11.20.js) | Supported |
+| **11.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/11.60.js`](offsets/11.60.js) | Supported |
+| **12.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.00.js`](offsets/12.00.js) | Supported |
+| **12.02** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.02.js`](offsets/12.02.js) | Supported |
+| **12.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.20.js`](offsets/12.20.js) | Supported |
+| **12.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.40.js`](offsets/12.40.js) | Supported |
+| **12.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.60.js`](offsets/12.60.js) | Supported |
+| **12.70** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/12.70.js`](offsets/12.70.js) | Supported |
+| **13.00** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/13.00.js`](offsets/13.00.js) | Supported |
+| **13.20** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/13.20.js`](offsets/13.20.js) | Supported |
+| **13.40** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/13.40.js`](offsets/13.40.js) | Supported |
+| **13.42** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/13.42.js`](offsets/13.42.js) | Supported |
+| **13.60** | JSC Prototype Getter | `aio_multi_wait` UAF | [`offsets/13.60.js`](offsets/13.60.js) | Supported |
+
+---
+
+## 2. Executive Architecture Overview
+
+The **Relapse Exploit** (`Relapse-Exploit`) is an advanced, multi-stage jailbreak toolchain for the PlayStation 5. The exploit chains together:
 1. **Userland WebKit Exploit:** Exploits JavaScriptCore (JSC) prototype getter reflection and structured clone deserialization to gain Userland Arbitrary Read/Write (ARW).
 2. **Worker-Based ROP Engine:** Hijacks a Web Worker's execution stack via `libkernel` thread list traversal to execute arbitrary FreeBSD/Sony kernel system calls using `setjmp`/`longjmp` context switching.
 3. **Kernel Use-After-Free (UAF) Exploit:** Exploits an asynchronous I/O race condition in `aio_multi_wait` combined with an `AF_ROUTE` KASLR bypass to achieve Slow Kernel R/W via sysctl OID corruption.
@@ -23,7 +66,7 @@ The **Relapse Exploit** (`Relapse-Exploit`) is a multi-stage jailbreak toolchain
 
 ---
 
-## 2. End-to-End Execution Flowchart
+## 3. End-to-End Execution Flowchart
 
 ```mermaid
 flowchart TD
@@ -77,284 +120,278 @@ flowchart TD
 
 ---
 
-## 3. Step-by-Step Execution Breakdown
+## 4. Technical Phase-by-Phase Deep Dive
 
-### Phase 1: Delivery & Environment Setup
+### Phase 1: Delivery & Multi-Protocol Server Architecture ([serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py))
 
-1. **Local Multi-Protocol Server ([serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py)):**
-   - **HTTP (Port 80):** Serves [index.html](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/index.html), JavaScript exploit payloads, and REST APIs (`/api/info`, `/api/payloads`, `/api/send-payload`).
-   - **HTTPS (Port 443):** Serves the exploit over TLS using an auto-generated self-signed certificate for `manuals.playstation.net`, enabling exploitation directly via the PS5 User's Guide.
-   - **DNS Responder (Port 53 UDP/TCP):** Intercepts DNS queries from the PS5 and resolves all hostnames to `SERVER_IP`, seamlessly redirecting the console to the exploit host.
-   - **Cache Control:** Injects `Cache-Control: no-store, no-cache, must-revalidate` headers on all responses to prevent the PS5 WebKit browser from caching stale scripts or exploit artifacts.
-   - **Host IP Resolution:** Detects the local LAN IP (configurable via `SERVER_IP` or `HOST_IP` environment variables) and prints direct connection instructions for the console.
-
-2. **Firmware Detection & Script Loading ([index.html](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/index.html), `src/firmware.js`):**
-   - [index.html](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/index.html) creates a console log UI (`<div id="console"></div>`) and loads the core scripts in sequence:
-     ```html
-     <script src="./src/firmware.js"></script>
-     <script src="./src/main.js"></script>
-     <script src="./src/rop.js"></script>
-     <script src="./src/utils/syscalls.js"></script>
-     <script type="module" src="./src/site.js"></script>
-     ```
-   - `src/firmware.js` inspects `navigator.userAgent` matching against `/PlayStation 5\/(\d+\.\d+)/`.
-   - Validates that the detected firmware version is present in the `supportedFirmware` array (from `7.00` to `13.60`).
-   - Sets `window.fw_str` and dynamically injects the matching profile script: `<script src="offsets/<firmware>.js">`.
+1. **Integrated Multi-Protocol Dispatcher:**
+   - **HTTP Server (`80/tcp`):** Delivers the web application frontend, HTML layout, exploit modules, and payload binary streams. Serves the REST API (`/api/info`, `/api/payloads`, `/api/send-payload`).
+   - **HTTPS Server (`443/tcp`):** Wraps HTTP delivery over TLS using an auto-generated self-signed certificate for `CN=manuals.playstation.net`. When the PS5 opens Settings -> User's Guide, the internal browser requests `https://manuals.playstation.net/document/en/ps5/index.html`.
+   - **DNS Responder (`53/udp`):** Listens for DNS lookups originating from the PS5. Any DNS query (`manuals.playstation.net` or fallback hostnames) is intercepted and answered with the server's LAN IP (`SERVER_IP`).
+   - **HTTP Cache Suppression:** Attaches `Cache-Control: no-store, no-cache, must-revalidate` headers to all assets to ensure fresh execution every run.
+2. **Firmware Matching ([src/firmware.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/firmware.js)):**
+   - Matches the PS5 browser user agent string against `/PlayStation 5\/(\d+\.\d+)/`.
+   - Verifies supported firmware index and loads `offsets/<fw>.js`.
 
 ---
 
-### Phase 2: Userland WebKit Exploitation (`src/webkit.js`, `src/utils/mem.js`)
+### Phase 2: WebKit Arbitrary Read/Write Primitive ([src/webkit.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/webkit.js), [src/utils/mem.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/utils/mem.js))
 
-The WebKit exploit establishes Arbitrary Read/Write (ARW) within the WebKit process memory space through five sequential stages:
-
-```
-[Stage 1: Object Setup] ──> [Stage 2: Address Leak] ──> [Stage 3: Heap Grooming]
-                                                                  │
-[Stage 5: ARW Memory Window] <── [Stage 4: Clone Corruption] <────┘
-```
-
-1. **Stage 1 — Exploit Object Preparation:**
-   - Creates a `0x100`-byte `ArrayBuffer` wrapped with `memoryView` (`Uint8Array`) and sets an 8-byte canary pattern (`0x5aa5c33cdeadbeef`) at offset `0x20`.
-   - Constructs `fakeHost` with encoded header flags and `q2` referencing `memoryView`.
-   - Constructs `targetHolder` referencing `nativeTarget` (`parseInt`) and DOM anchors.
-   - Stores an outer graph populated with filler `BigInt` arrays into `history.replaceState`.
-
-2. **Stage 2 — JavaScriptCore Address Leak:**
-   - `leakScopeObject()` exploits prototype reflection (`Leaker.prototype.__proto__ = new Proxy({}, { get: (t, p, r) => r })`) to leak the internal lexical scope.
-   - Attaches getter carrier properties holding `fakeHost` and `targetHolder` references to the scope.
-   - Invokes `Symbol.prototype.toString` on a crafted symbol wrapper (`LEAK_STRING_LENGTH = 924176`), leaking raw 64-bit pointers of `fakeHost` and `targetHolder` into `capturedWords`.
-
-3. **Stage 3 — Heap Grooming & Hole Punching:**
-   - Allocates 512 chunks of `0x10000` buffers into `keepAlive` to stabilize the heap.
-   - Punches butterfly holes and frees a `0x400000` memory slab using `MessageChannel.port1.postMessage` transfer lists.
-   - Sprays the reclaimed predecessor allocation with 64-bit pointers to `fakeAddress` (`fakeHost + 0x10`).
-
-4. **Stage 4 — Structured Clone Corruption & Offset Extraction:**
-   - Deserializes `history.state`. Because of the object pool mismatch created by the transfer list, index `2` of the cloned array overlaps our sprayed memory.
-   - Validates that the corrupted `Uint8Array`'s backing buffer matches the canary pattern (`0x5aa5c33cdeadbeef`).
-   - Crafts an upgraded header (`makeUpgradedHeader`) and overwrites `fakeHost.q0`.
-   - Reads `targetHolder` to find the address of `parseInt`, traverses its `FunctionExecutable` and `NativeExecutable` structures, and extracts:
-     - `nativeFunction`
-     - `nativeConstructor` (assigned to `globalThis.__ps5NativeCtor`).
-
-5. **Stage 5 — Memory Window Primitive (`src/utils/mem.js`):**
-   - `createMemoryWindow()` installs pointer redirection methods on `liveCandidate`.
-   - `installWindowP()` exports a full memory interface (`read1`, `read2`, `read4`, `read8`, `write1`, `write2`, `write4`, `write8`, and `leakval`), allowing arbitrary userland memory access.
+1. **JSC Prototype Getter Bug (`leakScopeObject`):**
+   - Leverages prototype reflection (`Leaker.prototype.__proto__ = new Proxy({}, { get: (t, p, r) => r })`) to access the internal lexical scope object.
+   - Binds getter properties referencing `fakeHost` and `targetHolder`.
+   - Calling `Symbol.prototype.toString` leaks the 64-bit memory addresses of `fakeHost` and `targetHolder`.
+2. **Heap Grooming & Structured Clone Deserialization:**
+   - Pre-allocates 512 heap chunks of `0x10000` bytes into a `keepAlive` array to stabilize the allocator.
+   - Releases a `0x400000` memory slab using `MessageChannel.port1.postMessage` transfer lists and sprays with 64-bit pointers pointing to `fakeAddress`.
+   - Deserializes `history.state`. Index 2 of the cloned array overlaps the sprayed structure, corrupting a `Uint8Array`'s backing buffer pointer.
+3. **Memory Window Installation ([src/utils/mem.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/utils/mem.js)):**
+   - Binds `read1`, `read2`, `read4`, `read8`, `write1`, `write2`, `write4`, `write8`, and `leakval`, providing stable Arbitrary Read/Write across userland memory.
 
 ---
 
-### Phase 3: Worker-Based Userland ROP Engine (`src/main.js`, `src/rop.js`, `src/utils/rop_slave.js`)
+### Phase 3: Worker-Based Userland ROP Engine ([src/main.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/main.js), [src/rop.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/rop.js))
 
-1. **Base Address Calculation:**
-   - Takes `globalThis.__ps5NativeCtor` and scans candidate offsets in `OFFSET_wk_host_constructor_candidates` to determine `libSceNKWebKitBase`.
-   - Reads WebKit's Global Offset Table / Import Table:
-     - Reads `OFFSET_wk_memset_import` and subtracts `OFFSET_lc_memset` to find `libSceLibcInternalBase`.
-     - Reads `OFFSET_wk___stack_chk_guard_import` and subtracts `OFFSET_lk___stack_chk_guard` to find `libKernelBase`.
-
-2. **Web Worker Stack Discovery:**
-   - Spawns a dedicated Web Worker running `src/utils/rop_slave.js`, which halts on `self.onmessage`.
-   - Iterates through the linked list of active threads located at `libKernelBase + OFFSET_lk__thread_list`.
-   - Inspects thread stack sizes, filtering for threads with a stack size of exactly `0x80000` (512 KB).
-   - Scans the stack space between `0x7f000` and `0x80000` to find the exact return address matching `libKernelBase + OFFSET_lk_worker_wait_return`.
-
-3. **ROP Execution via `setjmp` / `longjmp` Context Switching:**
-   - Allocates an execution context buffer (`malloc(0x40)`).
-   - Prepends the chain with a call to `setjmp` (`OFFSET_lc_setjmp`) to save CPU registers.
-   - Appends the chain with a restore call to `longjmp` (`OFFSET_lc_longjmp`).
-   - Overwrites the worker's stack return address with a `pop rsp` gadget pointing to `chain.stack_entry_point`.
-   - Triggers execution by posting a message to the worker (`worker.postMessage(0)`).
-   - Verifies ROP functionality by calling `SYS_GETPID` (0x014); compares the result against a poison value (`0x00c0ffeedeadbeef`).
+1. **Module Base Resolution:**
+   - Traverses import tables to locate:
+     - `libSceNKWebKitBase`
+     - `libSceLibcInternalBase`
+     - `libKernelBase`
+2. **Web Worker Stack Discovery ([src/utils/rop_slave.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/utils/rop_slave.js)):**
+   - Spawns a dedicated Web Worker that halts in a waiting loop (`self.onmessage`).
+   - Traverses the `libKernel` thread linked list (`OFFSET_lk__thread_list`) looking for a thread with a `0x80000` (512 KB) stack.
+   - Locates the return address slot matching `libKernelBase + OFFSET_lk_worker_wait_return`.
+3. **Execution via `setjmp` / `longjmp`:**
+   - Allocates a `0x40` byte CPU context structure.
+   - Pushes arguments following the System V AMD64 ABI: `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9`.
+   - Overwrites the worker return slot with a `pop rsp` gadget pointing to the synthesized ROP chain.
+   - Triggers execution with `worker.postMessage(0)`.
+   - Validates ROP execution by calling `SYS_GETPID` (`0x014`).
 
 ---
 
-### Phase 4: Kernel Exploitation (`src/relapse_exploit.js`)
+### Phase 4: Kernel Exploitation ([src/relapse_exploit.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/relapse_exploit.js))
 
-The kernel exploit establishes arbitrary kernel read/write through the following sub-stages:
-
-#### 4.1 Defeating Kernel ASLR (`leakKernelBase`)
-- Opens an `AF_ROUTE` raw routing socket (`SYS_SOCKET, AF_ROUTE, SOCK_RAW, 0`).
-- Builds an `RTM_GET` route query message specifying `RTA_DST | RTA_AUTHOR` requesting the interface address obtained from `SYS_NETGETIFLIST`.
-- Sends the request via `SYS_WRITE` and receives the reply with `SYS_RECVFROM(MSG_DONTWAIT)`.
-- Traverses the reply's `sockaddr` structures to locate the `AUTHOR` record (index 6).
-- An uninitialized stack slot at `author + 184` contains a kernel text return address.
-- Verifies the address format (`0xffffffffXXXXXXXX`) and subtracts the firmware-specific static offset (`kaslr.retStatic`) to compute `kbase`.
-
-#### 4.2 CPU Pinning & Real-Time Priority (`pinToSingleCore`)
-- Calls `SYS_CPUSET_GETAFFINITY` and `SYS_CPUSET_SETAFFINITY` (`CPU_LEVEL_WHICH`, `CPU_WHICH_TID`) to bind execution to a single CPU core.
-- Calls `SYS_RTPRIO_THREAD` with `RTP_SET` and `PRI_REALTIME` to set the thread priority to real-time.
-- **Purpose:** Eliminates multi-core race scheduling noise and OS thread migration during race condition timing windows.
-
-#### 4.3 AIO Preparation & Worker Parking (`raiseFdLimit`, `parkAioWorkers`)
-- Raises the process file descriptor limit via `SYS_SETRLIMIT` (`RLIMIT_NOFILE`).
-- Opens a dedicated UNIX domain `socketpair`.
-- Submits 24 blocking asynchronous read requests (`SYS_AIO_SUBMIT_CMD`, `AIO_CMD_READ`) against the empty socket.
-- Polls via `SYS_AIO_MULTI_POLL` until all 24 worker threads transition into the in-flight state (`state == 2`).
-- **Purpose:** Parks kernel AIO background worker threads so they do not interfere with the upcoming race condition.
-
-#### 4.4 The Vulnerability: `aio_multi_wait` Use-After-Free Race Condition
-- **Root Cause:** A Use-After-Free (UAF) flaw exists in the PS5 kernel's asynchronous I/O subsystem during multi-request waiting and cancellation handling (`aio_multi_wait`).
-- Allocates groups of candidate AIO requests on socketpairs (`claimPendingRequests`).
-- Builds forged waiter nodes (`buildWaiterNodes`) containing targeted kernel addresses:
-  - `firstTarget`
-  - `secondTarget`
-  - `kbase + nodeMutex`
-- Launches an atomic ROP batch (`runReclaimBatch`):
-  1. Executes 32 `SYS_IOCTL` churn requests with slab-targeted sizes.
-  2. Executes `SYS_AIO_MULTI_WAIT` with a microsecond timeout (`10,000 µs`).
-  3. Executes 256 trailing `SYS_IOCTL` churn requests.
-  4. Sprays 64 `SYS_AIO_SUBMIT_CMD` requests using the forged waiter nodes.
-- Polls requests and cancels waiter nodes to reclaim and corrupt target kernel structures.
-
-#### 4.5 Bootstrapping Slow Kernel Read/Write (`armKernelReadWrite`)
-- Targets two kernel sysctl OID structures:
-  - `kern.smp.cpus` (Steering OID `A`)
-  - `kern.smp.maxcpus` (Target/Data OID `B`)
-- Uses the AIO UAF to modify the OID flags (`oid.kind`), flipping them from read-only to writable (`CTLFLAG_WR`).
-- **Window Steering:**
-  - Modifies `kern.smp.cpus` (`setWindowLow`) to overwrite the data pointer (`oid_arg1`) of `kern.smp.maxcpus`.
-  - Reading or writing `kern.smp.maxcpus` via `__sysctl` now directly reads or writes the memory pointed to by `oid_arg1`.
-- Prepares a third OID (`mibC`) via `prepareHighWriter` to handle full 64-bit kernel address space redirection (`windowHigh`).
-- Tests kernel read and write with self-check assertions against `walkCounter`.
-
-#### 4.6 Upgrading to Fast Kernel Read/Write (`locatePipes`, `crossPipes`)
-- Traverses the kernel `allproc` list to find the current process (`curproc`) matching `getpid()`.
-- Locates the process file descriptor table (`procFdAddr`) and extracts `ucred` and `aioInfo`.
-- Creates two POSIX pipes via `SYS_PIPE2`: **`master`** and **`victim`**.
-- Finds the corresponding `struct pipe` kernel pointers in `fd_ofiles`.
-- Verifies pipe connectivity by writing test byte `0x5a` and checking `pipe.count`.
-- Using the slow sysctl write, updates `master`'s internal pipe structure:
-  - `master.count = 0`
-  - `master.in = 0`
-  - `master.out = 0`
-  - `master.size = 0x4000`
-  - `master.buffer = &victim` (points `master`'s buffer directly to `victim`'s pipe struct).
-- **Fast Arbitrary R/W Primitives:**
-  - **Redirect:** Writing 24 bytes (`count`, `size`, `buffer`) into `master.writeFd` dynamically redirects `victim.buffer` to any arbitrary kernel memory address (`aimVictim`).
-  - **Read:** Calling `SYS_READ` on `victim.readFd` performs fast arbitrary kernel reads (`kreadFast`, `readKernel32`, `readKernel64`).
-  - **Write:** Calling `SYS_WRITE` on `victim.writeFd` performs fast arbitrary kernel writes (`kwriteFast`, `writeKernel32`, `writeKernel64`).
-- Verifies fast R/W by reading and matching the kernel `.rodata` string probe (`rodataProbe`).
-
-#### 4.7 Defusing AIO Groups (`defuseAioGroups`)
-- Traverses the multi-level AIO group hash table located at `curproc->p_aioinfo`.
-- Resolves each armed AIO group ID by index and generation.
-- Safely writes `0` to the `waiters` pointer head of every armed group.
-- **Purpose:** Neutralizes dangling pointers and corrupted waiter nodes, ensuring the console will not panic when the process terminates or cleans up.
+1. **KASLR Defeat (`leakKernelBase`):**
+   - Queries `SYS_NETGETIFLIST` and issues `SYS_SOCKET(AF_ROUTE, SOCK_RAW, 0)`.
+   - Dispatches an `RTM_GET` query requesting `RTA_DST | RTA_AUTHOR`.
+   - Inspects the uninitialized kernel stack slot at `author + 184` to retrieve a kernel `.text` pointer.
+   - Subtracts static offset `kaslr.retStatic` to calculate the kernel base address `kbase`.
+2. **Thread Pinning & Worker Parking:**
+   - Binds the execution thread to a single CPU core via `SYS_CPUSET_SETAFFINITY`.
+   - Elevates scheduling priority to realtime via `SYS_RTPRIO_THREAD` (`PRI_REALTIME`).
+   - Opens an empty UNIX socketpair and queues 24 asynchronous read requests (`SYS_AIO_SUBMIT_CMD`, `AIO_CMD_READ`).
+   - Polls until all 24 worker threads transition to state 2, parking background kernel threads.
+3. **The Race Condition (`aio_multi_wait` UAF):**
+   - Executes an atomic ROP batch:
+     - 32 `SYS_IOCTL` churn requests.
+     - `SYS_AIO_MULTI_WAIT` with a `10,000 µs` timeout.
+     - 256 trailing `SYS_IOCTL` churn requests.
+     - 64 `SYS_AIO_SUBMIT_CMD` requests using forged waiter nodes.
+4. **Slow Kernel Read/Write via Corrupted Sysctl OIDs:**
+   - Targets `kern.smp.cpus` (Steering OID `A`) and `kern.smp.maxcpus` (Data OID `B`).
+   - Reclaims the freed waiter slab to flip OID flags from read-only to writable (`CTLFLAG_WR`).
+   - Writing to OID `A` redirects the data pointer (`oid_arg1`) of OID `B`. Calling `__sysctl` on OID `B` reads/writes any arbitrary 64-bit kernel memory address.
+5. **Upgrade to Fast Kernel Read/Write (Crossed Pipes):**
+   - Creates two POSIX pipes via `SYS_PIPE2`: **`master`** and **`victim`**.
+   - Locates their `struct pipe` descriptors in the process file descriptor table (`procFdAddr`).
+   - Overwrites `master.buffer` to point directly to `victim`'s pipe structure.
+   - Writing to `master.writeFd` dynamically aims `victim.buffer` at any arbitrary kernel target. Reading or writing `victim` performs fast arbitrary kernel reads and writes.
+6. **Defusing AIO Groups (`defuseAioGroups`):**
+   - Traverses the `curproc->p_aioinfo` group hash table.
+   - Safely zeroes the `waiters` pointer head of every armed group, neutralizing dangling pointers so the process never panics the kernel on exit.
 
 ---
 
-### Phase 5: Kernel Privilege Escalation & Sandbox Escape (`escalate`)
+### Phase 5: Kernel Privilege Escalation & Sandbox Escape ([src/relapse_exploit.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/relapse_exploit.js))
 
-Once Fast Kernel R/W is established, `escalate()` performs the following modifications:
+Using Fast Kernel R/W, `escalate()` applies the following kernel patches:
 
-| Target Structure | Field / Offset | New Value | Effect |
+| Structure | Target Field | Value | Operational Effect |
 | :--- | :--- | :--- | :--- |
-| **`ucred`** | `cr_uid`, `cr_ruid`, `cr_svuid` | `0` | Elevates Real, Effective, and Saved User ID to `root`. |
-| **`ucred`** | `cr_rgid`, `cr_svgid` | `0` | Elevates Real and Saved Group ID to `wheel`/`root`. |
-| **`ucred`** | `cr_ngroups` | `1` | Sets group count to 1. |
-| **`ucred`** | `cr_sceAuthId` | `sysCoreAuthId` | Grants System Core Sony authentication ID (`0x4800000000000007`). |
-| **`ucred`** | `cr_sceCaps`, `cr_sceCaps1` | `0xffffffffffffffff` | Grants maximum Sony kernel capabilities. |
-| **`ucred`** | `cr_sceAttrs` | `(attrs \| 0x80000000)` | Enables root/system attribute flags. |
-| **`filedesc`** | `fd_cdir` | `rootvnode` | Escapes chroot: sets current working directory to true filesystem root (`/`). |
-| **`filedesc`** | `fd_rdir` | `rootvnode` | Escapes chroot: sets process root directory to true filesystem root (`/`). |
-| **`filedesc`** | `fd_jdir` | `0` | Clears jail directory pointer (escapes FreeBSD jail). |
-| **`dynlib`** | `syscallStart` | `0` | Unmasks allowed syscall range start. |
-| **`dynlib`** | `syscallEnd` | `0xffffffff` | Unmasks allowed syscall range end. |
-| **`dynlib`** | `restrictFlags` | `0` | Disables syscall access restrictions. |
-| **`dynlib`** | `libkernelRef` | `1` | Bypasses library origin restrictions. |
+| **`ucred`** | `cr_uid`, `cr_ruid`, `cr_svuid` | `0` | Elevates Real, Effective, and Saved UID to `root`. |
+| **`ucred`** | `cr_rgid`, `cr_svgid` | `0` | Elevates Real and Saved GID to `wheel` / `root`. |
+| **`ucred`** | `cr_sceAuthId` | `sysCoreAuthId` | Grants System Core Sony auth ID (`0x4800000000000007`). |
+| **`ucred`** | `cr_sceCaps`, `cr_sceCaps1` | `0xffffffffffffffff` | Grants maximum kernel capability masks. |
+| **`ucred`** | `cr_sceAttrs` | `attrs \| 0x80000000` | Enables system root attribute flags. |
+| **`filedesc`** | `fd_cdir`, `fd_rdir` | `rootvnode` | Escapes chroot jail: sets process root to true filesystem root (`/`). |
+| **`filedesc`** | `fd_jdir` | `0` | Clears jail directory pointer (breaks FreeBSD jail). |
+| **`dynlib`** | `syscallStart`, `syscallEnd` | `0`, `0xffffffff` | Unmasks the entire FreeBSD syscall range. |
+| **`dynlib`** | `restrictFlags` | `0` | Disables syscall origin restrictions. |
+| **`dynlib`** | `libkernelRef` | `1` | Bypasses library caller restrictions. |
 
-**Verification:**
-Calls `SYS_GETUID` (verifies `uid == 0`) and `SYS_IS_IN_SANDBOX` (verifies `sandbox == 0`).
+Verification is performed by checking `SYS_GETUID == 0` and `SYS_IS_IN_SANDBOX == 0`.
 
 ---
 
-### Phase 6: Payload Staging & ELF Loader Daemon (`src/kexp.js`)
+### Phase 6: Payload Staging & ELF Loader Daemon ([src/kexp.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/kexp.js))
 
-1. **Symbol Resolution (`resolveSymbols`):**
-   - Resolves native functions from `libkernel` (`pthread_create`, `pthread_join`, `getpid`, `sysctlbyname`, `sceKernelSendNotificationRequest`) and `libc` (`malloc`, `free`, `memcpy`, `memset`, `strcmp`, `memcmp`, `vsnprintf`).
-
-2. **Shellcode Binary Patching (`patchShellcode`):**
-   - Fetches `payloads/kexp_2026_05_25.bin` (18,912 bytes).
-   - NOPs out resolver call stubs (offsets `0x1c`, `0x23`) and log call instructions.
-   - Injects the resolved function addresses into the shellcode import table (`0x48b0` – `0x4900`).
-   - Injects an inline `getpid` resolver at offset `0x10f1`.
-
-3. **Executable Memory Allocation (`mapExecutable`):**
+1. **Shellcode Dynamic Patching (`patchShellcode`):**
+   - Fetches [`payloads/kexp_2026_05_25.bin`](payloads/kexp_2026_05_25.bin).
+   - Resolves native functions (`pthread_create`, `sysctlbyname`, `sceKernelSendNotificationRequest`, `memcpy`, `malloc`) and injects them into the shellcode import table (`0x48b0` – `0x4900`).
+2. **JIT Memory Allocation & ELF Mapping:**
    - Allocates executable memory via `SYS_JITSHM_CREATE` with `PROT_RWX`.
-   - Maps shared memory via `SYS_MMAP` (`MAP_SHARED`).
-   - If direct memory copy is blocked, creates a writable alias via `SYS_JITSHM_ALIAS` (`PROT_RW`), copies the patched shellcode, and unmaps the alias.
-
-4. **ELF Loader Mapping (`mapElf`):**
-   - Fetches `payloads/elfldr-ps5-1360.elf`.
-   - Allocates memory via `SYS_MMAP` (`PROT_RW`, `MAP_PRIVATE_ANON`).
-   - Copies the ELF binary into the mapped region.
-
-5. **Shellcode Kernel Communication Pipes (`prepareShellcodePipes`):**
-   - Creates a dedicated pair of pipes (`master` and `victim`).
-   - Directs the master pipe's buffer to the victim pipe, giving the shellcode direct access to arbitrary kernel R/W via the crossed pipe primitive.
-
-6. **Thread Execution (`spawnAndJoin`):**
-   - Prepares an argument struct with:
-     - Pipe descriptors (`master.readFd`, `master.writeFd`, `victim.readFd`, `victim.writeFd`)
-     - Kernel address of `allproc`
-     - ELF loader base address and size
-   - Spawns the payload execution thread via `pthread_create` / `pthread_create_name_np`.
-   - The shellcode initializes and runs `elfldr`, which binds to TCP port `9021` and listens for incoming payload binaries.
+   - Maps [`payloads/elfldr-ps5-1360.elf`](payloads/elfldr-ps5-1360.elf) into memory.
+3. **Execution Daemon Spawn:**
+   - Prepares communication pipes and spawns the payload thread via `pthread_create`.
+   - `elfldr` initializes in the background, binds to **TCP port `9021`**, and begins listening for incoming homebrew payloads.
 
 ---
 
-### Phase 7: Cleanup, Safety & Error Recovery (`rescue`)
+### Phase 7: Cleanup, System Stability & Rescue ([src/relapse_exploit.js](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/src/relapse_exploit.js))
 
-The `finally` block in `run()` invokes `rescue()` to ensure system stability even if any intermediate step fails:
-- **`restoreThreadAttributes()`**: Restores original thread affinity mask and resets thread priority back to `PRI_NORMAL`.
-- **`defuseAioGroups()`**: Clears remaining armed AIO group waiter lists to prevent kernel panics on exit.
-- **`restoreOids()`**: Restores sysctl OID structures (`a`, `b`, `c`) back to their original read-only kinds and initial values.
-- **`restorePipes()`**: Clears crossed pipe buffer pointers before file descriptors are closed.
-- **`releaseAioWorkers()`**: Closes parked worker socket descriptors with sleep intervals to allow kernel threads to cleanly terminate.
-- **`closeScratchDescriptors()`**: Closes all temporary routing and IPC file descriptors.
+The `finally` block in `run()` executes `rescue()` to leave the console in a clean, stable state:
+- `restoreThreadAttributes()`: Resets CPU core affinity mask and sets scheduling priority back to normal.
+- `restoreOids()`: Restores sysctl OID kinds (`a`, `b`, `c`) back to their original read-only flags and values.
+- `restorePipes()`: Clears crossed pipe buffer pointers before file descriptors are closed.
+- `releaseAioWorkers()`: Closes parked socket descriptors with staged delays to prevent kernel panic.
 
 ---
 
-## 4. Key Data Structures & System Calls
+## 5. Payloads Catalog & Ecosystem Guide
 
-### Essential FreeBSD / Sony System Calls
+All payload binaries located in [`payloads/`](payloads/) are mounted into the container as a live volume (`./payloads:/app/payloads:Z`). Any file placed in this folder is instantly visible and usable without rebuilding the container.
 
-| Syscall Name | Number | Usage in Exploit Chain |
-| :--- | :--- | :--- |
-| `SYS_GETPID` | `0x014` | Sanity check for ROP chain execution & process identification. |
-| `SYS_GETUID` | `0x018` | Privilege check verifying successful escalation to root (`0`). |
-| `SYS_SOCKET` | `0x061` | Opens `AF_ROUTE` raw routing socket for KASLR address leak. |
-| `SYS_SOCKETPAIR` | `0x087` | Allocates UNIX socketpairs used to block AIO worker threads. |
-| `SYS_PIPE2` | `0x08D` / `0x19B` | Creates POSIX pipes for crossed-pipe fast kernel read/write. |
-| `SYS___SYSCTL` | `0x0CA` | Reads and writes corrupted sysctl OIDs for slow kernel R/W. |
-| `SYS_CPUSET_SETAFFINITY` | `0x1E8` | Pins current thread to a single CPU core. |
-| `SYS_RTPRIO_THREAD` | `0x1D2` | Sets realtime thread scheduling priority (`PRI_REALTIME`). |
-| `SYS_AIO_SUBMIT_CMD` | `0x256` | Submits asynchronous I/O read commands. |
-| `SYS_AIO_MULTI_POLL` | `0x257` | Polls status of in-flight and pending AIO requests. |
-| `SYS_AIO_MULTI_WAIT` | `0x258` | Waits on multiple AIO requests; triggers the UAF race condition. |
-| `SYS_AIO_MULTI_CANCEL` | `0x259` | Cancels pending AIO requests during waiter array reclamation. |
-| `SYS_JITSHM_CREATE` | `0x215` | Creates executable shared memory file descriptor. |
-| `SYS_JITSHM_ALIAS` | `0x216` | Creates writable memory alias for JIT shared memory. |
-| `SYS_IS_IN_SANDBOX` | `0x249` | Verifies that sandbox restrictions have been removed (`0`). |
+### Comprehensive Payloads Inventory
+
+| Payload Name | File Size | Format | Category | Description & Usage |
+| :--- | :---: | :---: | :--- | :--- |
+| **`elfldr-ps5-1360.elf`** | 388 KB | `.elf` | **ELF Loader** | Core payload daemon listening on TCP port 9021. Staged automatically by the exploit to receive and run unsigned homebrew binaries. |
+| **`etaHEN_2.6b.elf`** | 4.52 MB | `.elf` | **Homebrew Enabler** | All-in-one PS5 Homebrew Enabler by LightningMods. Activates kstuff, FTP server, payload launcher, game cheats, and Debug Settings. |
+| **`kstuff-lite_v1.13.elf`** | 1.72 MB | `.elf` | **Kernel Patcher** | Kernel patcher by Sleirsgoevy. Enables execution of decrypted fself binaries and fake packages (`fpkg`) on firmware 1.xx–13.xx. |
+| **`kstuff-lite_v1.11.elf`** | 1.66 MB | `.elf` | **Kernel Patcher** | Previous stable build of Sleirsgoevy's kernel patcher for compatibility comparisons. |
+| **`kexp_2026_05_25.bin`** | 18.5 KB | `.bin` | **Kernel Stager** | Primary kernel shellcode stager. Prepares privileged memory and stages the ELF loader daemon. |
+| **`kexp-v0.8-24cf6e5.bin`** | 17.8 KB | `.bin` | **Kernel Stager** | Legacy kernel shellcode stager build. |
+| **`orbit_store.elf`** | 42.03 MB | `.elf` | **Homebrew Store** | Orbit Store graphical homebrew browser and installer for downloading apps and utilities directly on the console. |
+| **`PS5SX2Installer.elf`** | 1.14 MB | `.elf` | **Installer** | PS5SX 2 payload and toolchain installer binary. |
+| **`PS5SXHelper.elf`** | 1.00 MB | `.elf` | **Helper Utility** | Supporting payload daemon and helper utility for PS5SX functions. |
+| **`shadowmountplus_1.7beta4.elf`** | 2.36 MB | `.elf` | **Filesystem Mounter** | Advanced filesystem mounter utility by EchoStretch. Mounts internal system and game partitions for dumping and modding. |
+| **`web-file-mgr-v1.9.elf`** | 337 KB | `.elf` | **File Manager** | Web-based file manager by logic-68. Spawns an internal HTTP browser on the console to manage and transfer files. |
+| **`browser_launcher_v1.0.0.elf`** | 407 KB | `.elf` | **Utility** | Unlocks and launches the full-screen PS5 WebKit internet browser with URL address bar. |
+| **`Snipers-YouTube-Installer.elf`** | 114 KB | `.elf` | **App Patcher** | Patches the official YouTube app to enable custom video loading and offline playback. |
+| **`pldmgr_v0.5.2.elf`** | 2.30 MB | `.elf` | **Payload Manager** | Background payload manager daemon for staging, organizing, and chaining multiple homebrew payloads. |
+| **`LegacyJB_1.2.1.elf`** | 482 KB | `.elf` | **Legacy Loader** | Backwards-compatibility loader for staging legacy payloads into memory. |
+| **`LegacyJB_1.2.1.bin`** | 482 KB | `.bin` | **Legacy Loader** | Raw binary version of the legacy backwards-compatibility loader. |
+| **`webkit-autoloader-installer_v0.5.2.elf`** | 2.20 MB | `.elf` | **Offline Cache** | Installs the WebKit exploit offline directly into the PS5's User's Guide cache for offline jailbreaking without internet. |
+| **`webkit-autoloader-installer_v0.5.2-kp-fix.elf`** | 2.22 MB | `.elf` | **Offline Cache** | Offline cache installer with kernel-panic stability patch. |
+| **`PS5_LAPY20011_v1.05.pkg`** | 78 MB | `.pkg` | **App Package** | PS5-Xplorer graphical file manager by Lapy (tracked with Git LFS). |
+| **`PPSA20011_PS5_Xplorer.exfat`** | 122 MB | `.exfat` | **Disk Image** | Pre-built exFAT disk image for PS5-Xplorer direct installation (tracked with Git LFS). |
+| **`IV0002-ITEM00001_00-STOREUPD00000000.pkg`** | 60 MB | `.pkg` | **Store Package** | ItemzFlow / Homebrew store update package (tracked with Git LFS). |
 
 ---
 
-## 5. Containerization & Deployment (Podman & Podman-Compose)
+### Payload Delivery Methods
 
-The containerization setup for **Relapse-Exploit** using **Podman** and **podman-compose** has been created and verified.
+Once the exploit has completed and `elfldr` is active on port `9021`, payloads can be launched via three methods:
 
-### 5.1 Container Architecture & What Was Configured
+#### Method 1: Interactive Web UI (One-Click)
+Navigate to `http://<SERVER_IP>/` on any PC, smartphone, or directly on the PS5. The live payload card grid will display all available payloads. Click **"Send to PS5"** to transmit the binary over port 9021.
+
+#### Method 2: REST API
+Send payloads programmatically using HTTP POST:
+```bash
+curl -X POST http://192.168.50.194/api/send-payload \
+     -H "Content-Type: application/json" \
+     -d '{"name": "etaHEN_2.6b.elf", "port": 9021}'
+```
+
+#### Method 3: Netcat / Raw TCP Socket (Port 9021)
+You can stream any `.elf` or `.bin` binary directly from your terminal to the console:
+```bash
+# Using netcat (nc)
+nc -q0 192.168.50.194 9021 < payloads/etaHEN_2.6b.elf
+
+# Using bash /dev/tcp
+cat payloads/etaHEN_2.6b.elf > /dev/tcp/192.168.50.194/9021
+```
+
+---
+
+## 6. Built-in REST API Documentation
+
+The server exposes lightweight JSON endpoints for integration into scripts, custom launchers, or automation tools:
+
+### `GET /api/info`
+Returns server networking state and client connection parameters.
+
+- **Request:** `GET http://<SERVER_IP>/api/info`
+- **Response Schema:**
+  ```json
+  {
+    "clientIp": "192.168.50.150",
+    "serverIp": "192.168.50.194",
+    "defaultPort": 9021
+  }
+  ```
+
+### `GET /api/payloads`
+Scans [`payloads/`](payloads/) and returns metadata for all executable files.
+
+- **Request:** `GET http://<SERVER_IP>/api/payloads`
+- **Response Schema:**
+  ```json
+  {
+    "payloads": [
+      {
+        "name": "etaHEN_2.6b.elf",
+        "size": 4740600,
+        "formattedSize": "4.52 MB",
+        "ext": ".elf",
+        "category": "Homebrew Enabler",
+        "description": "All-in-one PS5 Homebrew Enabler by LightningMods. Activates kstuff, FTP server, payload launcher, cheats, and debug settings."
+      }
+    ]
+  }
+  ```
+
+### `POST /api/send-payload`
+Instructs the server to read a payload from [`payloads/`](payloads/) and send it to the PS5's ELF loader daemon.
+
+- **Request:** `POST http://<SERVER_IP>/api/send-payload`
+- **Headers:** `Content-Type: application/json`
+- **Body:**
+  ```json
+  {
+    "name": "etaHEN_2.6b.elf",
+    "host": "192.168.50.150",
+    "port": 9021
+  }
+  ```
+  *(If `host` is omitted, the server defaults to the IP address of the calling client).*
+- **Success Response (`200 OK`):**
+  ```json
+  {
+    "success": true,
+    "message": "Successfully sent 'etaHEN_2.6b.elf' (4,740,600 bytes) to 192.168.50.150:9021"
+  }
+  ```
+- **Error Response (`500 Internal Server Error`):**
+  ```json
+  {
+    "success": false,
+    "error": "Connection refused at 192.168.50.150:9021. Make sure the exploit ran and elfldr is listening on port 9021!"
+  }
+  ```
+
+---
+
+## 7. Containerization & Podman Orchestration
+
+The project is containerized for reproducibility, cross-distro portability, and isolation.
+
+### Container Architecture Diagram
 
 ```mermaid
 flowchart LR
-    subgraph Host["Host Machine (Linux / Podman Runtime)"]
+    subgraph Host["Host Machine (Linux / Podman Engine)"]
         ENV[".env (SERVER_IP=192.168.50.194)"]
-        PAYLOADS_DIR["./payloads/ (.elf, .bin, .pkg)"]
+        PAYLOADS_DIR["./payloads/ (.elf, .bin, .pkg, .exfat)"]
         COMPOSE["compose.yaml (podman-compose)"]
     end
 
     subgraph Container["Container: relapse-exploit (python:3.12-alpine)"]
         SERVER["serve.py (PID 1)"]
-        DNS["DNS Server (Port 53 UDP/TCP)"]
+        DNS["DNS Server (Port 53 UDP)"]
         HTTP["HTTP Server (Port 80 TCP)"]
         HTTPS["HTTPS Server (Port 443 TCP)"]
         PAYLOADS_VOL["/app/payloads (Live Volume Mount)"]
@@ -368,48 +405,34 @@ flowchart LR
     COMPOSE -->|deploys| Container
     ENV -->|injects IP| SERVER
     PAYLOADS_DIR <==>|:Z Bind Mount| PAYLOADS_VOL
-    PS5_DNS -->|Port 53| DNS
+    PS5_DNS -->|Port 53 UDP| DNS
     DNS -->|Answers with SERVER_IP| PS5_DNS
-    PS5_BROWSER -->|Port 80 / 443| HTTP
-    PS5_BROWSER -->|Port 443| HTTPS
+    PS5_BROWSER -->|Port 80 TCP| HTTP
+    PS5_BROWSER -->|Port 443 TCP| HTTPS
     SERVER <--> PAYLOADS_VOL
 ```
 
-- **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile)**:
-  - **Base image:** `python:3.12-alpine` with `openssl` and `ca-certificates` for SSL certificate generation.
-  - **Copies static assets:** [index.html](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/index.html), [serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py), `src/`, and `offsets/`.
-  - **Exposes ports:** `80/tcp`, `443/tcp`, `53/tcp`, and `53/udp`.
-  - **Sets `PYTHONUNBUFFERED=1`:** logs and payloads appear in real-time without output buffering.
+### Key Deployment Characteristics
 
-- **[compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml)**:
-  - **Configures the `relapse-exploit` service with port bindings:**
-    - `80:80/tcp` (HTTP)
-    - `443:443/tcp` (HTTPS)
-    - `${SERVER_IP:-0.0.0.0}:53:53/udp` (DNS responder for PS5 redirection)
-  - **Coexistence with Host Resolvers:** Binds UDP port 53 specifically to `${SERVER_IP}` (your host LAN IP). This avoids conflicts with local stub resolvers like `systemd-resolved` (which listen on `127.0.0.53:53` across Fedora, Debian, Ubuntu, and Arch), allowing the container to serve the console without disrupting host DNS.
-  - **Mounts the host directory `./payloads:/app/payloads:Z` as a live volume:** (with `:Z` for SELinux / Podman permission handling), allowing you to add or delete `.elf`, `.bin`, and `.pkg` payloads on the host without rebuilding the container.
-  - **Passes `SERVER_IP`:** the built-in DNS server correctly advertises your host's LAN IP to the PS5.
-  - **Single Compose Source:** Uses `compose.yaml` exclusively (redundant `docker-compose.yml` duplicates have been removed to eliminate compose CLI specification warnings).
-
-- **[.containerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.containerignore)**:
-  - Excludes `.git`, `__pycache__`, certificates, and the payload binaries from the image build context so builds are instant and payloads stay purely in the live volume.
-
-- **[serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py)** enhancements:
-  - Added `SERVER_IP` / `HOST_IP` environment variable support so the DNS responder and UI correctly route PS5 traffic to your host LAN IP.
-  - Added clean `SIGTERM` / `SIGINT` handling for instantaneous graceful container shutdowns (`podman-compose down` / `podman stop`).
+1. **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile):**
+   - **Base image:** `python:3.12-alpine` with `openssl` and `ca-certificates`.
+   - **Unbuffered Logging:** `PYTHONUNBUFFERED=1` enables real-time console log streaming via `podman logs -f`.
+   - **Asset Encapsulation:** Copies `index.html`, `serve.py`, `src/`, and `offsets/`.
+2. **[compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml):**
+   - **Port 80 TCP:** Exploit delivery web page and REST API.
+   - **Port 443 TCP:** User's Guide SSL exploit delivery.
+   - **Port 53 UDP (`${SERVER_IP:-0.0.0.0}:53:53/udp`):** Binds specifically to the host LAN IP. This permits the container to service the PS5 while coexisting with `systemd-resolved` (which listens on `127.0.0.53:53` on the host).
+   - **Live Volume Mount (`./payloads:/app/payloads:Z`):** SELinux-compliant `:Z` flag allows live payload injection on the host.
+3. **[.containerignore](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.containerignore):**
+   - Excludes git history, certificates, and large binaries from the build context for lightning-fast container builds.
 
 ---
 
-### 5.2 How to Run
+## 8. Multi-Distro Installation & Execution Guide
 
-#### Option 1: Automated One-Click Setup Script (`setup.sh` - Recommended)
-The included script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) provides a universal, zero-friction installer across all major Linux distributions:
-- **Fedora / RHEL / CentOS / AlmaLinux / Rocky**
-- **Debian / Ubuntu / Linux Mint / Pop!_OS**
-- **Arch Linux / Manjaro / EndeavourOS**
-- **openSUSE / SLES**
+### Option 1: Universal Automated Setup Script (`setup.sh` - Recommended)
 
-It handles package dependencies, firewall configuration, DNS conflict mitigation, Docker API socket compatibility, LAN IP detection, and launches the container with automatic health verification:
+The included [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically inspects `/etc/os-release`, manages dependencies, configures firewalls, resolves DNS port conflicts, enables Docker API socket emulation, detects your host IP, and launches the container:
 
 ```bash
 cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
@@ -417,13 +440,26 @@ chmod +x setup.sh
 sudo ./setup.sh
 ```
 
+#### What `setup.sh` Automates:
+- **Dependency Installation:**
+  - **Fedora / RHEL / Rocky / AlmaLinux:** `dnf install -y podman podman-compose firewalld curl iproute`
+  - **Debian / Ubuntu / Linux Mint / Pop!_OS:** `apt-get install -y podman curl iproute2` (with automated `podman-compose` pip fallback)
+  - **Arch Linux / Manjaro / EndeavourOS:** `pacman -Sy --needed podman podman-compose curl iproute2`
+  - **openSUSE / SLES:** `zypper install -y podman podman-compose curl iproute2`
+- **DNS Conflict Resolution:** Stops and disables conflicting host daemons (`dnsmasq`, `bind9`, `named`) while preserving `systemd-resolved`.
+- **Low-Port Binding:** Configures `net.ipv4.ip_unprivileged_port_start = 53` and persists to `/etc/sysctl.d/99-podman-ports.conf`.
+- **Host Firewall:** Opens ports `80/tcp`, `443/tcp`, and `53/udp` permanently on `firewalld` or `ufw`.
+- **Docker Socket Emulation:** Starts `podman.socket`, creates `/var/run/docker.sock`, and sets `DOCKER_HOST="unix:///run/podman/podman.sock"`.
+- **Execution Fallback:** If `podman-compose` fails due to provider quirks, automatically performs a native `podman build` and `podman run`.
+- **Health Verification:** Tests HTTP status on port 80 until `200 OK` is returned, then displays console connection instructions.
+
 ---
 
-#### Option 2: Rootless Podman Deployment (Unprivileged User)
-If you prefer running containers without `sudo` as a standard non-root user:
+### Option 2: Rootless Podman Deployment (Unprivileged User)
+
+If you prefer running without root privileges or `sudo`:
 
 1. **Allow Unprivileged Port Binding (< 1024):**
-   Linux restricts ports below 1024 to root by default. Allow non-root users to bind port 53 upwards:
    ```bash
    sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
    echo "net.ipv4.ip_unprivileged_port_start = 53" | sudo tee /etc/sysctl.d/99-podman-ports.conf
@@ -432,193 +468,180 @@ If you prefer running containers without `sudo` as a standard non-root user:
 2. **Launch with Podman Compose:**
    ```bash
    podman rm -f relapse-exploit 2>/dev/null || true
-   podman-compose -f compose.yaml up -d
+   podman-compose -f compose.yaml up -d --build
    ```
 
-3. **Monitor Live Server Logs:**
+3. **Verify Status & Logs:**
    ```bash
+   podman ps --filter "name=relapse-exploit"
    podman-compose -f compose.yaml logs -f
    ```
 
 ---
 
-#### Option 3: Rootful Podman / Compose Deployment (with Docker Socket Compatibility)
-If your system's `podman-compose` CLI provider is linked to Docker Compose v2 (such as on Fedora or Debian systems where `podman-compose` points to Docker Compose), it expects a Docker-compatible API socket:
+### Option 3: Manual Step-by-Step by Distribution
 
-1. **Enable the Podman Socket:**
-   ```bash
-   sudo systemctl enable --now podman.socket
-   sudo ln -sf /run/podman/podman.sock /var/run/docker.sock
-   export DOCKER_HOST="unix:///run/podman/podman.sock"
-   ```
-
-2. **Launch Container:**
-   ```bash
-   sudo podman-compose -f compose.yaml up -d --build
-   ```
-
-3. **Direct Podman Fallback (Native Build & Run):**
-   If any compose wrapper encounters socket issues on your distro, run natively via standard Podman:
-   ```bash
-   podman build -t relapse-exploit:latest -f Containerfile .
-   podman run -d --name relapse-exploit \
-       --restart unless-stopped \
-       -p 80:80/tcp \
-       -p 443:443/tcp \
-       -p "192.168.50.194:53:53/udp" \
-       -v "$(pwd)/payloads:/app/payloads:Z" \
-       -e SERVER_IP="192.168.50.194" \
-       -e PYTHONUNBUFFERED=1 \
-       relapse-exploit:latest
-   ```
-
----
-
-### 5.3 Configuring the Host IP
-
-Your host machine's current LAN IP (`192.168.50.194`) is configured in **[.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env)** (and **[.env.example](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env.example)**). If your network IP changes:
-
-```ini
-# In .env
-SERVER_IP=192.168.50.194
-```
-
-Or pass it dynamically at runtime:
-
+#### Fedora / RHEL 9+ / Rocky / AlmaLinux
 ```bash
-SERVER_IP=192.168.50.194 podman-compose -f compose.yaml up -d
+# 1. Install packages
+sudo dnf install -y podman podman-compose firewalld curl
+
+# 2. Open firewall
+sudo firewall-cmd --add-service=dns --add-service=http --add-service=https --permanent
+sudo firewall-cmd --add-port=80/tcp --add-port=443/tcp --add-port=53/udp --permanent
+sudo firewall-cmd --reload
+
+# 3. Allow low port binding
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+
+# 4. Enable Docker API socket
+sudo systemctl enable --now podman.socket
+sudo ln -sf /run/podman/podman.sock /var/run/docker.sock
+export DOCKER_HOST="unix:///run/podman/podman.sock"
+
+# 5. Launch container
+podman-compose -f compose.yaml up -d --build
+```
+
+#### Debian 12+ / Ubuntu 22.04+ / 24.04 LTS
+```bash
+# 1. Install packages
+sudo apt-get update
+sudo apt-get install -y podman curl iproute2 python3-pip
+pip3 install --break-system-packages podman-compose 2>/dev/null || sudo apt-get install -y podman-compose
+
+# 2. Open UFW firewall (if active)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw allow 53/udp
+sudo ufw reload
+
+# 3. Allow low port binding & launch
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+podman-compose -f compose.yaml up -d --build
+```
+
+#### Arch Linux / Manjaro
+```bash
+# 1. Install packages
+sudo pacman -Sy --needed podman podman-compose curl iproute2
+
+# 2. Allow low port binding
+sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+
+# 3. Launch container
+podman-compose -f compose.yaml up -d --build
 ```
 
 ---
 
-### 5.4 Managing Payloads Dynamically
+## 9. PlayStation 5 Connection Guide
 
-Any files added, updated, or removed in `/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit/payloads` are synced immediately to `/app/payloads` inside the running container and appear instantly on the web interface without restarting the container:
+Ensure your PlayStation 5 and your host machine are connected to the **same local area network** (Wi-Fi or Ethernet).
 
-- **Volume Mount:** `./payloads:/app/payloads:Z`
-- **Supported Formats:** `.elf`, `.bin`, `.pkg`, `.exfat`
-- **Git LFS Enabled:** Large assets (`*.pkg`, `*.exfat`) are tracked via Git Large File Storage (LFS).
+### Method 1: User's Guide (DNS Redirection - Recommended)
 
-Supported payload categories recognized by the web UI:
-- **Homebrew Enablers (`etaHEN`)**: Activates kstuff, FTP server, cheats, and debug settings.
-- **Kernel Patchers (`kstuff`)**: Enables execution of decrypted fself binaries and fake packages (`fpkg`).
-- **Linux Bootloaders (`kexec`)**: Boots Linux (SteamOS / Ubuntu / Fedora) from USB.
-- **Filesystem Mounters (`shadowmount`)**: Mounts system and game partitions for modding and dumping.
-- **Payload Managers & Loaders (`elfldr`, `pldmgr`, `legacyjb`, `PS5SX`)**: Stages and executes payloads over port 9021.
-
----
-
-### 5.5 Host Network & Service Configuration FAQ
-
-#### 1. Do you need `firewall-cmd` or `ufw` on the host?
-
-**YES, you definitely need host firewall rules.**
-* **Why:** Containers sit behind the Linux host network stack. Even though Podman forwards container ports, if the host firewall blocks incoming LAN packets from the PlayStation 5, the console cannot connect.
-* **Firewalld (Fedora / RHEL / openSUSE):**
-  ```bash
-  sudo firewall-cmd --add-service=dns --add-service=http --add-service=https --permanent
-  sudo firewall-cmd --add-port=80/tcp --add-port=443/tcp --add-port=53/udp --permanent
-  sudo firewall-cmd --reload
-  ```
-* **UFW (Ubuntu / Debian):**
-  ```bash
-  sudo ufw allow 80/tcp
-  sudo ufw allow 443/tcp
-  sudo ufw allow 53/udp
-  sudo ufw reload
-  ```
+1. On your PS5, go to **Settings** -> **Network** -> **Settings** -> **Set Up Internet Connection**.
+2. Select your Wi-Fi or LAN connection and press the **Options button (≡)** -> **Advanced Settings**.
+3. Set **DNS Settings** to **Manual**.
+4. Set **Primary DNS** to your host LAN IP: `192.168.50.194` (leave Secondary DNS blank or `0.0.0.0`).
+5. Save settings and return to the main Settings menu.
+6. Open **Settings** -> **User's Guide, Health & Safety, and Other Information** -> **User's Guide** -> **User's Guide**.
+7. When prompted with the SSL certificate security prompt, select **"Yes"** to accept the self-signed certificate.
+8. The Relapse Exploit interface will load and begin execution automatically.
 
 ---
 
-#### 2. Do you need `dnsmasq` or `bind9` on the host?
+### Method 2: Direct Browser / PSN Messages (No SSL Warning)
 
-**NO, you do NOT need `dnsmasq` or `bind9`!**
-* **Why:** [serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py#L224-L280) inside the container includes its own **built-in DNS server**. It listens on port 53 and responds to the PS5's queries for `manuals.playstation.net` by returning your `SERVER_IP`.
-* **Important:** If `dnsmasq` or `bind9` is active on the host, it will monopolize port 53 and cause an `Address already in use` conflict. Keep them disabled:
+1. On your PS5 (or using the PlayStation Mobile App), send a message to any friend or secondary account containing:
+   ```
+   http://192.168.50.194/
+   ```
+2. Open the conversation on your PS5 and click the link.
+3. The PS5 internet browser will open directly to the exploit page without any SSL certificate warnings.
+
+---
+
+## 10. Troubleshooting & Diagnostic Handbook
+
+### 1. `failed to connect to the docker API at unix:///var/run/docker.sock`
+- **Cause:** Your system's `podman-compose` CLI resolves to Docker Compose v2, which searches for the Docker socket.
+- **Solution:** Enable Podman's systemd socket service and link the socket:
+  ```bash
+  sudo systemctl enable --now podman.socket
+  sudo ln -sf /run/podman/podman.sock /var/run/docker.sock
+  export DOCKER_HOST="unix:///run/podman/podman.sock"
+  ```
+  *(Or execute `./setup.sh`, which configures this automatically).*
+
+---
+
+### 2. `rootlessport cannot expose privileged port 53: permission denied`
+- **Cause:** Linux restricts binding ports below 1024 to root by default.
+- **Solution:** Allow rootless users to bind low ports starting from 53:
+  ```bash
+  sudo sysctl -w net.ipv4.ip_unprivileged_port_start=53
+  echo "net.ipv4.ip_unprivileged_port_start = 53" | sudo tee /etc/sysctl.d/99-podman-ports.conf
+  ```
+
+---
+
+### 3. `bind: address already in use: 53`
+- **Cause:** A local DNS server daemon (`dnsmasq`, `named`, `bind9`) is running on the host.
+- **Solution:** Disable the conflicting service:
   ```bash
   sudo systemctl stop dnsmasq bind9 named 2>/dev/null || true
   sudo systemctl disable dnsmasq bind9 named 2>/dev/null || true
   ```
-* **What about `systemd-resolved`?**  
-  `systemd-resolved` binds to loopback addresses `127.0.0.53:53` and `127.0.0.54:53`. Because our container binds port 53 to your LAN IP (`192.168.50.194:53:53/udp`), **there is NO conflict with `systemd-resolved`**, and your host machine's internet resolution remains undisturbed!
+- **Note on `systemd-resolved`:** `systemd-resolved` only binds `127.0.0.53:53` on loopback. Because our `compose.yaml` binds specifically to `${SERVER_IP}:53:53/udp`, it **does not** conflict with `systemd-resolved`.
 
 ---
 
-#### 3. Are the required ports (80, 443, 53 UDP/TCP) enabled in the container?
-
-**YES, all required ports are mapped and verified:**
-
-1. **In [Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile#L20-L24):**
-   ```dockerfile
-   EXPOSE 80/tcp
-   EXPOSE 443/tcp
-   EXPOSE 53/tcp
-   EXPOSE 53/udp
-   ```
-
-2. **In [compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml#L9-L14):**
-   ```yaml
-   ports:
-     - "80:80/tcp"                    # HTTP (Exploit web page & REST APIs)
-     - "443:443/tcp"                  # HTTPS (PS5 User's Guide SSL delivery)
-     - "${SERVER_IP:-0.0.0.0}:53:53/udp" # DNS queries from PS5
-   ```
-
-3. **In the application ([serve.py](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/serve.py)):**
-   - **Port 80 (TCP):** Serves `index.html`, JavaScript exploit files, and `/api/payloads`.
-   - **Port 443 (TCP):** Serves over HTTPS with self-signed SSL for `manuals.playstation.net`.
-   - **Port 53 (UDP):** Built-in DNS responder directing PS5 traffic to `SERVER_IP`.
-
-#### Summary Comparison
-
-| Component | Handled by Host | Handled by Container | Notes |
-| :--- | :---: | :---: | :--- |
-| **Firewall rules (80, 443, 53)** | **Yes** (`firewall-cmd` / `ufw`) | — | Necessary so the host OS permits incoming LAN traffic from the PS5. |
-| **HTTP Web Server (80)** | — | **Yes** (`serve.py`) | Mapped via `80:80/tcp`. |
-| **HTTPS Web Server (443)** | — | **Yes** (`serve.py`) | Mapped via `443:443/tcp`. |
-| **DNS Server (53)** | **No** (Do not run `dnsmasq`) | **Yes** (`serve.py`) | Built into `serve.py`; mapped via `${SERVER_IP}:53:53/udp`. |
+### 4. `Connection refused at <host>:9021` when Sending Payloads
+- **Cause:** The exploit has not yet executed, or `elfldr` was not spawned into memory.
+- **Solution:**
+  1. Ensure the exploit page ran through all stages to completion.
+  2. Verify the console screen displays: `[+] ELF Loader Daemon Listening on Port 9021`.
+  3. Retry sending the payload.
 
 ---
 
-### 5.6 Multi-Distro Automated Script: `setup.sh`
+### 5. SELinux Permission Denied on `./payloads`
+- **Cause:** On Fedora / RHEL, SELinux prevents containers from reading host files without the proper volume label.
+- **Solution:** The `:Z` flag in [compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml) (`./payloads:/app/payloads:Z`) automatically configures container SELinux labels. If manually running `podman run`, always include `:Z` in the `-v` parameter.
 
-The automated setup and launch script [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) has been created and marked executable (`chmod +x setup.sh`).
+---
 
-#### Features of [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh):
-- **Multi-Distro OS Identification (`/etc/os-release`):**
-  - **Fedora / RHEL / CentOS / AlmaLinux / Rocky:** Uses `dnf` to install `podman`, `podman-compose`, `firewalld`, and `curl`.
-  - **Debian / Ubuntu / Linux Mint / Pop!_OS:** Uses `apt-get` to install `podman`, `podman-compose` (with automatic pip fallback), `ufw`, and `curl`.
-  - **Arch Linux / Manjaro / EndeavourOS:** Uses `pacman -Sy --needed` to install `podman`, `podman-compose`, and `curl`.
-  - **openSUSE / SLES:** Uses `zypper` to install `podman`, `podman-compose`, and `curl`.
-- **Port 53 Conflict Resolution & Sysctl Optimization:**
-  - Automatically identifies and stops active `dnsmasq`, `bind9`, or `named` daemons to free port 53.
-  - Sets `net.ipv4.ip_unprivileged_port_start = 53` in memory and persists to `/etc/sysctl.d/99-podman-ports.conf`.
-- **Automated Host Firewall Setup:**
-  - For `firewalld`: Permanently opens `dns`, `http`, `https` services and `80/tcp`, `443/tcp`, `53/udp` ports, then reloads.
-  - For `ufw`: Allows `80/tcp`, `443/tcp`, and `53/udp`, then reloads.
-- **Docker Socket & Compose API Compatibility:**
-  - Automatically enables and starts `podman.socket` via systemd.
-  - Ensures `/var/run/docker.sock` points to `/run/podman/podman.sock` for Docker Compose v2 CLI plugins.
-  - Sets `DOCKER_HOST="unix:///run/podman/podman.sock"`.
-  - Includes a direct native `podman build` and `podman run` fallback if compose providers report unexpected socket errors.
-- **LAN IP Auto-Detection & `.env` Configuration:**
-  - Discovers the host's actual default route LAN IP (avoiding local loopbacks and container bridges).
-  - Updates [.env](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/.env) with `SERVER_IP=<detected_lan_ip>`.
-- **Container Health Check & Verification:**
-  - Launches container with live payload volume mounting (`./payloads:/app/payloads:Z`).
-  - Polls `http://127.0.0.1:80/api/info` to verify the container has started and responds with `HTTP 200 OK`.
-  - Displays a formatted operational banner with connection instructions for the PlayStation 5.
+## 11. Git LFS & Version Control Workflow
 
-#### How to Run the Setup Script
+Large binary files (`*.pkg`, `*.exfat`) are tracked using **Git Large File Storage (LFS)**:
 
 ```bash
-cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
-sudo ./setup.sh
+# Check Git LFS status
+git lfs status
+
+# List files managed by LFS
+git lfs ls-files
+```
+
+### Remote Tracking Policy
+
+This repository is configured with two remotes:
+- **`wolf` (`git@github.com:WolfSc84/PS5-Server-Jailbreak.git`):** Primary private development repository.
+- **`origin` (`git@github.com:blackbearreloaded/ProsperoEden.git`):** Upstream public repository.
+
+> [!CAUTION]
+> **Strict Policy:** All custom modifications, `.env` configs, private certificates, and payloads must **ONLY** be committed and pushed to remote `wolf` on branch `wolf-custom`. **Never push to `origin`**.
+
+```bash
+# Correct push command
+git push wolf wolf-custom
 ```
 
 ---
 
-## 6. Repository Structure & File Mapping
+## 12. Repository Structure & File Mapping
 
 ```
 Relapse-Exploit/
@@ -628,16 +651,38 @@ Relapse-Exploit/
 ├── compose.yaml                 # Podman Compose service definition
 ├── .containerignore             # Podman build ignore rules
 ├── .env.example                 # Environment variable template for host LAN IP configuration
-├── .env                         # Active environment configuration
+├── .env                         # Active environment configuration (SERVER_IP=192.168.50.194)
 ├── setup.sh                     # Multi-distro automated host setup & runner (Fedora/Debian/Arch/openSUSE)
 ├── Workflow.png                 # Architectural visual diagram
 ├── README.md                    # Unified project documentation, architecture, deployment & credits
 ├── LICENSE                      # Project license
-├── payloads/                    # Dynamic payload volume directory (.elf, .bin, .pkg)
+├── .gitattributes               # Git LFS tracking rules (*.pkg, *.exfat)
+├── cert.pem                     # Self-signed SSL certificate for manuals.playstation.net
+├── key.pem                      # SSL private key
+├── payloads/                    # Dynamic payload volume directory (.elf, .bin, .pkg, .exfat)
 │   ├── elfldr-ps5-1360.elf      # ELF loader daemon listening on port 9021
-│   └── kexp_2026_05_25.bin      # Kernel bootstrap shellcode (18,912 bytes)
-├── offsets/
-│   ├── 7.00.js ... 13.60.js     # Per-firmware gadget, syscall, and kernel RVA profiles
+│   ├── etaHEN_2.6b.elf          # PS5 Homebrew Enabler by LightningMods
+│   ├── kstuff-lite_v1.13.elf    # Kernel patcher by Sleirsgoevy
+│   ├── kstuff-lite_v1.11.elf    # Kernel patcher (v1.11)
+│   ├── kexp_2026_05_25.bin      # Kernel bootstrap shellcode (18,912 bytes)
+│   ├── kexp-v0.8-24cf6e5.bin    # Kernel bootstrap shellcode (v0.8)
+│   ├── orbit_store.elf          # Orbit Store graphical homebrew browser
+│   ├── PS5SX2Installer.elf      # PS5SX 2 Installer
+│   ├── PS5SXHelper.elf          # PS5SX Helper utility
+│   ├── shadowmountplus_1.7beta4.elf # Filesystem partition mounter
+│   ├── web-file-mgr-v1.9.elf    # Web file manager by logic-68
+│   ├── browser_launcher_v1.0.0.elf # Full-screen browser launcher
+│   ├── Snipers-YouTube-Installer.elf # YouTube patcher
+│   ├── pldmgr_v0.5.2.elf        # Payload manager daemon
+│   ├── LegacyJB_1.2.1.elf       # Legacy loader (.elf)
+│   ├── LegacyJB_1.2.1.bin       # Legacy loader (.bin)
+│   ├── webkit-autoloader-installer_v0.5.2.elf # Offline cache installer
+│   ├── webkit-autoloader-installer_v0.5.2-kp-fix.elf # Offline cache installer (KP fix)
+│   ├── PS5_LAPY20011_v1.05.pkg  # PS5-Xplorer package by Lapy (LFS)
+│   ├── PPSA20011_PS5_Xplorer.exfat # PS5-Xplorer exFAT disk image (LFS)
+│   └── IV0002-ITEM00001_00-STOREUPD00000000.pkg # ItemzFlow Store update (LFS)
+├── offsets/                     # Per-firmware offset profiles (33 profiles)
+│   ├── 7.00.js ... 13.60.js     # Gadget, syscall, and kernel RVA profiles
 └── src/
     ├── firmware.js              # User-Agent parser & firmware validator
     ├── main.js                  # Userland ROP setup, worker stack scan & entry point
@@ -655,7 +700,7 @@ Relapse-Exploit/
 
 ---
 
-## 7. Credits & Acknowledgements
+## 13. Credits & Acknowledgements
 
 - **Sonic_Iso:** Kernel Exploit
 - **Jordy:** WebKit Exploit and Kernel Bug Discovery
@@ -664,11 +709,11 @@ Relapse-Exploit/
 - **Dr. Yenyen:** Testing & Validation
 
 **Special Thanks & Community Contributions:**
-TheFlow, SlidyBat, Flatz, cow, nhk, bollarz, Sleirsgoevy, EchoStretch, EarthOnion.
+TheFlow, SlidyBat, Flatz, cow, nhk, bollarz, Sleirsgoevy, EchoStretch, EarthOnion, LightningMods, logic-68, Lapy.
 
 ---
 
-## 8. Disclaimer
+## 14. Disclaimer
 
 This project is intended for **educational and security research purposes only**. It does not endorse piracy, unauthorized access, or misuse of commercial devices. Use it only on devices you own or are authorized to test, and comply with applicable local laws and regulations.
 
