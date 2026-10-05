@@ -2,7 +2,7 @@
 
 > **Supported Firmware Scope:** PlayStation 5 System Software `7.00` through `13.60` (33 supported firmware profiles)  
 > **Target Output:** Arbitrary Kernel R/W, Root Privileges (`uid = 0`), Full Sandbox Escape, and ELF Loader Daemon listening on port `9021`.  
-> **Containerization Runtime:** Rootless & Rootful Podman, Podman Compose, Multi-Distro Linux (`Fedora`, `Debian`, `Ubuntu`, `Arch`, `openSUSE`).
+> **Containerization Runtime:** Docker (Docker Compose) & Podman (Podman Compose), Multi-Distro Linux (`Debian`, `Ubuntu`, `Fedora`, `Arch`, `openSUSE`, Proxmox VE).
 
 ![Relapse Exploit Workflow](Workflow.png)
 
@@ -375,18 +375,18 @@ Instructs the server to read a payload from [`payloads/`](payloads/) and send it
 
 ---
 
-## 7. Containerization & Podman Orchestration
+## 7. Containerization & Orchestration (Docker & Podman)
 
-The project is containerized for reproducibility, cross-distro portability, and isolation.
+The project is containerized for reproducibility, cross-distro portability, and isolation, supporting both **Docker** and **Podman** out of the box.
 
 ### Container Architecture Diagram
 
 ```mermaid
 flowchart LR
-    subgraph Host["Host Machine (Linux / Podman Engine)"]
-        ENV[".env (SERVER_IP=192.168.50.194)"]
+    subgraph Host["Host Machine (Linux / Docker or Podman Engine)"]
+        ENV[".env (SERVER_IP=192.168.50.17)"]
         PAYLOADS_DIR["./payloads/ (.elf, .bin, .pkg, .exfat)"]
-        COMPOSE["compose.yaml (podman-compose)"]
+        COMPOSE["compose.yaml (docker compose / podman-compose)"]
     end
 
     subgraph Container["Container: relapse-exploit (python:3.12-alpine)"]
@@ -404,7 +404,7 @@ flowchart LR
 
     COMPOSE -->|deploys| Container
     ENV -->|injects IP| SERVER
-    PAYLOADS_DIR <==>|:Z Bind Mount| PAYLOADS_VOL
+    PAYLOADS_DIR <==>|Live Bind Mount| PAYLOADS_VOL
     PS5_DNS -->|Port 53 UDP| DNS
     DNS -->|Answers with SERVER_IP| PS5_DNS
     PS5_BROWSER -->|Port 80 TCP| HTTP
@@ -414,9 +414,9 @@ flowchart LR
 
 ### Key Deployment Characteristics
 
-1. **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile):**
+1. **[Containerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Containerfile) & [Dockerfile](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/Dockerfile):**
    - **Base image:** `python:3.12-alpine` with `openssl` and `ca-certificates`.
-   - **Unbuffered Logging:** `PYTHONUNBUFFERED=1` enables real-time console log streaming via `podman logs -f`.
+   - **Unbuffered Logging:** `PYTHONUNBUFFERED=1` enables real-time console log streaming via `docker compose logs -f` or `podman-compose logs -f`.
    - **Asset Encapsulation:** Copies `index.html`, `serve.py`, `src/`, and `offsets/`.
 2. **[compose.yaml](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/compose.yaml):**
    - **Port 80 TCP:** Exploit delivery web page and REST API.
@@ -432,7 +432,7 @@ flowchart LR
 
 ### Option 1: Universal Automated Setup Script (`setup.sh` - Recommended)
 
-The included [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically inspects `/etc/os-release`, manages dependencies, configures firewalls, resolves DNS port conflicts, enables Docker API socket emulation, detects your host IP, and launches the container:
+The included [setup.sh](file:///home/wolfgangsan/Repositories/PS5%20Hack/Relapse-Exploit/setup.sh) automatically detects your operating system, identifies whether **Docker** or **Podman** is installed, installs only missing prerequisites, configures firewalls, resolves DNS port conflicts, detects your host IP, and launches the container:
 
 ```bash
 cd "/home/wolfgangsan/Repositories/PS5 Hack/Relapse-Exploit"
@@ -441,16 +441,11 @@ sudo ./setup.sh
 ```
 
 #### What `setup.sh` Automates:
-- **Dependency Installation:**
-  - **Fedora / RHEL / Rocky / AlmaLinux:** `dnf install -y podman podman-compose firewalld curl iproute`
-  - **Debian / Ubuntu / Linux Mint / Pop!_OS:** `apt-get install -y podman curl iproute2` (with automated `podman-compose` pip fallback)
-  - **Arch Linux / Manjaro / EndeavourOS:** `pacman -Sy --needed podman podman-compose curl iproute2`
-  - **openSUSE / SLES:** `zypper install -y podman podman-compose curl iproute2`
+- **Intelligent Engine Selection:** Automatically detects active Docker or Podman. If both are available, Docker is prioritized (ideal for Debian/Ubuntu and Proxmox LXC/VM environments). Override anytime using `--docker` or `--podman`.
+- **Smart Dependency Detection:** Only installs missing packages. If Docker, Podman, curl, or iproute are already present, they are reused without reinstalling.
+- **Compose & Native Run Resilience:** If `docker compose` or `podman-compose` is available, it deploys via `compose.yaml`. If compose is not present, it seamlessly executes native container build and run.
 - **DNS Conflict Resolution:** Stops and disables conflicting host daemons (`dnsmasq`, `bind9`, `named`) while preserving `systemd-resolved`.
-- **Low-Port Binding:** Configures `net.ipv4.ip_unprivileged_port_start = 53` and persists to `/etc/sysctl.d/99-podman-ports.conf`.
 - **Host Firewall:** Opens ports `80/tcp`, `443/tcp`, and `53/udp` permanently on `firewalld` or `ufw`.
-- **Docker Socket Emulation:** Starts `podman.socket`, creates `/var/run/docker.sock`, and sets `DOCKER_HOST="unix:///run/podman/podman.sock"`.
-- **Execution Fallback:** If `podman-compose` fails due to provider quirks, automatically performs a native `podman build` and `podman run`.
 - **Health Verification:** Tests HTTP status on port 80 until `200 OK` is returned, then displays console connection instructions.
 
 ---
